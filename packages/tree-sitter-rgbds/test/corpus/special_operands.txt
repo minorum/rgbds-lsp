@@ -9,16 +9,17 @@ SP plus offset
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))
-        (operand
-          (sp_offset
-            (register)
-            (expression
-              (number))))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (sp_offset
+              (sp_register)
+              (expression
+                (number)))))))))
 
 ================================================================================
 SP minus offset
@@ -31,16 +32,17 @@ SP minus offset
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))
-        (operand
-          (sp_offset
-            (register)
-            (expression
-              (number))))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (sp_offset
+              (sp_register)
+              (expression
+                (number)))))))))
 
 ================================================================================
 HL increment memory
@@ -53,14 +55,15 @@ HL increment memory
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))
-        (operand
-          (memory_operand
-            (register)))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (memory_operand
+              (register))))))))
 
 ================================================================================
 HL decrement memory
@@ -73,14 +76,15 @@ HL decrement memory
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (memory_operand
-            (register)))
-        (operand
-          (register))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (memory_operand
+              (register)))
+          (operand
+            (register)))))))
 
 ================================================================================
 Absolute memory address
@@ -93,15 +97,16 @@ Absolute memory address
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))
-        (operand
-          (memory_operand
-            (expression
-              (number))))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (memory_operand
+              (expression
+                (number)))))))))
 
 ================================================================================
 Named memory address
@@ -114,16 +119,17 @@ Named memory address
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))
-        (operand
-          (memory_operand
-            (expression
-              (symbol_reference
-                (identifier)))))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (memory_operand
+              (expression
+                (symbol_reference
+                  (identifier))))))))))
 
 ================================================================================
 RST instruction
@@ -136,12 +142,13 @@ RST instruction
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (expression
-            (number)))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (expression
+              (number))))))))
 
 ================================================================================
 Bit operation
@@ -154,14 +161,15 @@ Bit operation
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (expression
-            (number)))
-        (operand
-          (register))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (expression
+              (number)))
+          (operand
+            (register)))))))
 
 ================================================================================
 SP as standalone register operand
@@ -174,8 +182,9 @@ SP as standalone register operand
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (sp_register)))))))

@@ -11,13 +11,14 @@ const INSTRUCTIONS = [
   'set', 'sla', 'sra', 'srl', 'stop', 'sub', 'swap', 'xor',
 ];
 
-// Registers
+// Registers (sp handled separately for sp+offset disambiguation)
 const REGISTERS = [
   'a', 'b', 'c', 'd', 'e', 'h', 'l',
-  'af', 'bc', 'de', 'hl', 'sp',
+  'af', 'bc', 'de', 'hl',
 ];
 
-const CONDITIONS = ['z', 'nz', 'nc'];
+// Fix #1: Add 'c' as a condition (z, nz, c, nc)
+const CONDITIONS = ['z', 'nz', 'c', 'nc'];
 
 module.exports = grammar({
   name: 'rgbds',
@@ -25,28 +26,43 @@ module.exports = grammar({
   extras: $ => [
     /[ \t\r]/,
     $.block_comment,
+    $.line_continuation,  // Fix #9: backslash line continuation
   ],
 
   word: $ => $.identifier,
 
-  conflicts: $ => [
-    [$.sp_offset, $.operand],
-  ],
+  conflicts: $ => [],
 
   rules: {
-    source_file: $ => repeat($.line),
+    source_file: $ => seq(
+      repeat($.line),
+      optional($.final_line),  // Fix #11: file without trailing newline
+    ),
 
-    // Flat line-based structure — no nesting. Each line stands alone.
+    // Fix #4: support multiple statements per line with :: separator
+    // Fix #11: final_line handles EOF without newline
     line: $ => seq(
       optional($.label_definition),
-      optional(choice(
-        $.instruction,
-        $.directive,
-        $.macro_invocation,
-      )),
+      optional($.statement),
+      repeat(seq('::', $.statement)),
       optional($.comment),
       '\n',
     ),
+
+    final_line: $ => choice(
+      seq($.label_definition, optional($.statement), repeat(seq('::', $.statement)), optional($.comment)),
+      seq($.statement, repeat(seq('::', $.statement)), optional($.comment)),
+      $.comment,
+    ),
+
+    statement: $ => choice(
+      $.instruction,
+      $.directive,
+      $.macro_invocation,
+    ),
+
+    // Fix #9: line continuation
+    line_continuation: _ => token(seq('\\', /\r?\n/)),
 
     // ─── Comments ─────────────────────────────────────────────
 
@@ -55,6 +71,8 @@ module.exports = grammar({
     block_comment: _ => token(seq('/*', /[^*]*\*+([^/*][^*]*\*+)*/, '/')),
 
     // ─── Labels ───────────────────────────────────────────────
+    // Fix #5/#6: identifiers can contain dots for scoped labels
+    // e.g. AnotherGlobal.with_another_local:
 
     label_definition: $ => choice(
       $.global_label,
@@ -63,12 +81,13 @@ module.exports = grammar({
     ),
 
     global_label: $ => seq(
-      field('name', $.identifier),
+      field('name', choice($.identifier, $.scoped_identifier)),
       choice('::', ':'),
     ),
 
     local_label: $ => choice(
-      seq(field('name', $.local_identifier), choice('::', ':')),
+      prec(2, seq(field('name', $.local_identifier), '::')),
+      prec(2, seq(field('name', $.local_identifier), ':')),
       field('name', $.local_identifier),  // colon-less local label
     ),
 
@@ -89,30 +108,41 @@ module.exports = grammar({
     ),
 
     operand: $ => choice(
-      $.sp_offset,           // sp+n / sp-n (ld hl, sp+$00)
+      $.sp_offset,             // sp+n (must come first)
+      $.sp_register,           // standalone sp
+      $.negated_condition,     // Fix #2: !cc
       $.register,
       $.condition,
       $.memory_operand,
       $.expression,
     ),
 
+    // Fix #3: sp_offset restricted to literal 'sp' only
     sp_offset: $ => prec(2, seq(
-      $.register,   // matches 'sp' (already tokenized as register)
+      $.sp_register,
       choice('+', '-'),
       $.expression,
     )),
 
+    // sp is separate from register to allow sp_offset disambiguation
+    sp_register: _ => token(ci('sp')),
+
     register: _ => token(choice(...REGISTERS.map(r => ci(r)))),
 
+    // Fix #1: 'c' included in conditions
     condition: _ => token(choice(...CONDITIONS.map(c => ci(c)))),
+
+    // Fix #2: negated conditions (!z, !nz, !c, !nc)
+    negated_condition: $ => seq('!', $.condition),
 
     memory_operand: $ => seq(
       '[',
       choice(
-        seq($.register, '+'),  // [hl+]
-        seq($.register, '-'),  // [hl-]
-        $.register,            // [hl], [bc], [de]
-        $.expression,          // [$FF00+c], [$addr]
+        seq($.register, '+'),     // [hl+]
+        seq($.register, '-'),     // [hl-]
+        $.register,               // [hl], [bc], [de]
+        $.sp_register,            // [sp] (rare but valid)
+        $.expression,             // [$FF00+c], [$addr]
       ),
       ']',
     ),
@@ -148,6 +178,7 @@ module.exports = grammar({
       $.break_directive,
       $.shift_directive,
       $.endsection_directive,
+      // Fix #7: UNION/NEXTU/ENDU as block markers (also SECTION modifier handled below)
       $.union_directive,
       $.nextu_directive,
       $.endu_directive,
@@ -157,13 +188,17 @@ module.exports = grammar({
       $.popo_directive,
       $.pushc_directive,
       $.popc_directive,
+      // Fix #8: LOAD / ENDL
+      $.load_directive,
+      $.endl_directive,
     ),
 
     // ─── Section ──────────────────────────────────────────────
+    // Fix #7: SECTION supports UNION and FRAGMENT modifiers
 
     section_directive: $ => seq(
       ci_kw('SECTION'),
-      optional(ci_kw('FRAGMENT')),
+      optional(choice(ci_kw('UNION'), ci_kw('FRAGMENT'))),
       $.string,
       ',',
       $.section_type,
@@ -236,10 +271,15 @@ module.exports = grammar({
 
     endm_directive: _ => ci_kw('ENDM'),
 
-    macro_invocation: $ => prec(-1, seq(
+    // Fix #12: macro_invocation at lowest precedence, only when nothing else matches
+    macro_invocation: $ => prec(-2, seq(
       field('name', $.identifier),
-      optional($.expression_list),
+      optional($.macro_arg_list),
     )),
+
+    // Macro arguments are less structured than expression_list —
+    // they can contain arbitrary text separated by commas
+    macro_arg_list: $ => $.expression_list,
 
     macro_arg: _ => /\\[1-9#@]/,
 
@@ -268,6 +308,20 @@ module.exports = grammar({
 
     endr_directive: _ => ci_kw('ENDR'),
     break_directive: _ => ci_kw('BREAK'),
+
+    // ─── LOAD / ENDL (Fix #8) ─────────────────────────────────
+
+    load_directive: $ => seq(
+      ci_kw('LOAD'),
+      optional(choice(ci_kw('UNION'), ci_kw('FRAGMENT'))),
+      $.string,
+      ',',
+      $.section_type,
+      optional(seq('[', $.expression, ']')),
+      repeat(seq(',', $.section_option)),
+    ),
+
+    endl_directive: _ => ci_kw('ENDL'),
 
     // ─── Charmap ──────────────────────────────────────────────
 
@@ -309,7 +363,7 @@ module.exports = grammar({
     pushs_directive: _ => ci_kw('PUSHS'),
     pops_directive: _ => ci_kw('POPS'),
 
-    // ─── Union ────────────────────────────────────────────────
+    // ─── Union (as standalone block markers too) ──────────────
 
     union_directive: _ => ci_kw('UNION'),
     nextu_directive: _ => ci_kw('NEXTU'),
@@ -330,6 +384,7 @@ module.exports = grammar({
       $.number,
       $.string,
       $.char_literal,
+      $.gfx_literal,    // Fix #10: backtick graphics literal
       $.symbol_reference,
       $.macro_arg,
     ),
@@ -385,28 +440,41 @@ module.exports = grammar({
 
     symbol_reference: $ => choice(
       $.identifier,
+      $.scoped_identifier,   // Fix #6: Global.local as reference
       $.local_identifier,
-      seq($.identifier, $.local_identifier),  // GlobalLabel.local
-      /:[+-]+/,  // anonymous label refs
+      '@',                   // current PC address
+      /:[+-]+/,              // anonymous label refs
     ),
 
     // ─── Tokens ───────────────────────────────────────────────
 
-    identifier: _ => /[a-zA-Z_][a-zA-Z0-9_]*/,
+    // Fix #5: RGBDS identifiers can start with [a-zA-Z_] and contain # @ in body
+    // Note: $ is NOT valid in identifiers — it's the hex prefix
+    // Note: @ alone is the PC address symbol, not an identifier
+    identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*/,
+
+    // Fix #6: scoped identifier with exactly one dot (Global.local)
+    scoped_identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*\.[a-zA-Z_][a-zA-Z0-9_#@]*/,
 
     local_identifier: _ => /\.[a-zA-Z_][a-zA-Z0-9_]*/,
 
+    // Fix #10: number literals including fixed-point
     number: _ => choice(
-      /\$[0-9a-fA-F]+/,
-      /0[xX][0-9a-fA-F]+/,
-      /%[01]+/,
-      /0[bB][01]+/,
-      /&[0-7]+/,
-      /0[oO][0-7]+/,
-      /[0-9]+/,
+      /\$[0-9a-fA-F]+/,            // hex: $FF
+      /0[xX][0-9a-fA-F]+/,         // hex: 0xFF
+      /%[01]+/,                     // binary: %1010
+      /0[bB][01]+/,                 // binary: 0b1010
+      /&[0-7]+/,                    // octal: &77
+      /0[oO][0-7]+/,               // octal: 0o77
+      /[0-9]+\.[0-9]+[qQ][0-9]+/,  // fixed-point with precision: 12.34q8
+      /[0-9]+\.[0-9]+/,            // fixed-point: 12.34
+      /[0-9]+/,                     // decimal
     ),
 
     char_literal: _ => seq("'", /[^'\r\n]/, "'"),
+
+    // Fix #10: backtick graphics literal
+    gfx_literal: _ => /`[0-3]+/,
 
     string: _ => seq('"', repeat(choice(/[^"\\\r\n]/, /\\./)), '"'),
   },

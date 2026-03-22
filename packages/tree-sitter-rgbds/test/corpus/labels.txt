@@ -14,8 +14,9 @@ MainLoop:
       (global_label
         (identifier))))
   (line
-    (instruction
-      (mnemonic))))
+    (statement
+      (instruction
+        (mnemonic)))))
 
 ================================================================================
 Exported global label
@@ -33,8 +34,9 @@ ExportedSymbol::
       (global_label
         (identifier))))
   (line
-    (instruction
-      (mnemonic))))
+    (statement
+      (instruction
+        (mnemonic)))))
 
 ================================================================================
 Local label with colon
@@ -52,15 +54,16 @@ Local label with colon
       (local_label
         (local_identifier))))
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (condition))
-        (operand
-          (expression
-            (symbol_reference
-              (local_identifier))))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (condition))
+          (operand
+            (expression
+              (symbol_reference
+                (local_identifier)))))))))
 
 ================================================================================
 Local label without colon
@@ -78,8 +81,9 @@ Local label without colon
       (local_label
         (local_identifier))))
   (line
-    (instruction
-      (mnemonic))))
+    (statement
+      (instruction
+        (mnemonic)))))
 
 ================================================================================
 Label with instruction on same line
@@ -96,8 +100,10 @@ WaitVBlank: halt
     (label_definition
       (global_label
         (identifier)))
-    (instruction
-      (mnemonic)))
+    (statement
+      (instruction
+        (mnemonic))))
   (line
-    (instruction
-      (mnemonic))))
+    (statement
+      (instruction
+        (mnemonic)))))

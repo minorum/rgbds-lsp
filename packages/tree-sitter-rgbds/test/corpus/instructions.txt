@@ -9,8 +9,9 @@ Simple instruction
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic))))
+    (statement
+      (instruction
+        (mnemonic)))))
 
 ================================================================================
 Load instruction
@@ -23,13 +24,14 @@ Load instruction
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))
-        (operand
-          (register))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (register)))))))
 
 ================================================================================
 Memory operand
@@ -42,14 +44,15 @@ Memory operand
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))
-        (operand
-          (memory_operand
-            (register)))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (memory_operand
+              (register))))))))
 
 ================================================================================
 Immediate value
@@ -62,14 +65,15 @@ Immediate value
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))
-        (operand
-          (expression
-            (number)))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (expression
+              (number))))))))
 
 ================================================================================
 Call with label
@@ -82,13 +86,14 @@ Call with label
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (expression
-            (symbol_reference
-              (identifier))))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (expression
+              (symbol_reference
+                (identifier)))))))))
 
 ================================================================================
 Conditional jump
@@ -101,12 +106,13 @@ Conditional jump
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (condition))
-        (operand
-          (expression
-            (symbol_reference
-              (local_identifier))))))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (condition))
+          (operand
+            (expression
+              (symbol_reference
+                (local_identifier)))))))))

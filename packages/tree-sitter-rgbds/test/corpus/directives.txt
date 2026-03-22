@@ -9,12 +9,13 @@ SECTION "Main", ROM0[$0100]
 (source_file
   (line)
   (line
-    (directive
-      (section_directive
-        (string)
-        (section_type)
-        (expression
-          (number))))))
+    (statement
+      (directive
+        (section_directive
+          (string)
+          (section_type)
+          (expression
+            (number)))))))
 
 ================================================================================
 Data bytes
@@ -27,15 +28,16 @@ Data bytes
 (source_file
   (line)
   (line
-    (directive
-      (data_directive
-        (expression_list
-          (expression
-            (number))
-          (expression
-            (number))
-          (expression
-            (number)))))))
+    (statement
+      (directive
+        (data_directive
+          (expression_list
+            (expression
+              (number))
+            (expression
+              (number))
+            (expression
+              (number))))))))
 
 ================================================================================
 EQU constant with DEF
@@ -48,11 +50,12 @@ DEF PLAYER_HP EQU $C100
 (source_file
   (line)
   (line
-    (directive
-      (constant_directive
-        (identifier)
-        (expression
-          (number))))))
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))
 
 ================================================================================
 Legacy EQU constant
@@ -65,11 +68,12 @@ MAX_HEALTH EQU 100
 (source_file
   (line)
   (line
-    (directive
-      (constant_directive
-        (identifier)
-        (expression
-          (number))))))
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))
 
 ================================================================================
 Include directive
@@ -82,9 +86,10 @@ INCLUDE "ram/wram.asm"
 (source_file
   (line)
   (line
-    (directive
-      (include_directive
-        (string)))))
+    (statement
+      (directive
+        (include_directive
+          (string))))))
 
 ================================================================================
 Comment line
@@ -110,14 +115,15 @@ Inline comment
 (source_file
   (line)
   (line
-    (instruction
-      (mnemonic)
-      (operand_list
-        (operand
-          (register))
-        (operand
-          (expression
-            (number)))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (expression
+              (number))))))
     (comment)))
 
 ================================================================================
@@ -133,15 +139,18 @@ ENDM
 (source_file
   (line)
   (line
-    (directive
-      (macro_start
-        (identifier))))
+    (statement
+      (directive
+        (macro_start
+          (identifier)))))
   (line
-    (instruction
-      (mnemonic)))
+    (statement
+      (instruction
+        (mnemonic))))
   (line
-    (directive
-      (endm_directive))))
+    (statement
+      (directive
+        (endm_directive)))))
 
 ================================================================================
 Conditional boundary markers
@@ -156,18 +165,21 @@ ENDC
 (source_file
   (line)
   (line
-    (directive
-      (if_directive
-        (expression
-          (function_call
-            (builtin_function)
-            (expression_list
-              (expression
-                (symbol_reference
-                  (identifier)))))))))
+    (statement
+      (directive
+        (if_directive
+          (expression
+            (function_call
+              (builtin_function)
+              (expression_list
+                (expression
+                  (symbol_reference
+                    (identifier))))))))))
   (line
-    (instruction
-      (mnemonic)))
+    (statement
+      (instruction
+        (mnemonic))))
   (line
-    (directive
-      (endc_directive))))
+    (statement
+      (directive
+        (endc_directive)))))
