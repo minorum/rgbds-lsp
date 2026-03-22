@@ -1,0 +1,16 @@
+{
+  "grammars": [
+    {
+      "name": "rgbds",
+      "camelCase": false,
+      "scope": "source.rgbds",
+      "path": ".",
+      "file-types": ["asm", "inc"],
+      "injection-regex": "^(rgbds|gbz80|sm83)$"
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT"
+  }
+}

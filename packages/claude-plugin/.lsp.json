@@ -1,0 +1,11 @@
+{
+  "rgbds": {
+    "command": "rgbds-language-server",
+    "args": ["--stdio"],
+    "extensionToLanguage": {
+      ".asm": "asm",
+      ".inc": "asm"
+    },
+    "transport": "stdio"
+  }
+}

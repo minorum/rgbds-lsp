@@ -1,0 +1,29 @@
+{
+  "name": "rgbds-language-server",
+  "version": "0.1.0",
+  "description": "Language server for RGBDS Game Boy assembly — definitions, references, completion, diagnostics, rename",
+  "license": "MIT",
+  "keywords": ["lsp", "language-server", "rgbds", "gameboy", "assembly", "gbz80"],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "rgbds-language-server": "dist/index.js"
+  },
+  "files": [
+    "dist/**"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "vscode-languageserver": "^9.0.1",
+    "vscode-languageserver-textdocument": "^1.0.12",
+    "tree-sitter": "^0.25.0",
+    "tree-sitter-rgbds": "*"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}

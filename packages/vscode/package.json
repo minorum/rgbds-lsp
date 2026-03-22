@@ -1,0 +1,80 @@
+{
+  "name": "rgbds-lsp",
+  "displayName": "RGBDS Assembly",
+  "description": "Language support for RGBDS Game Boy assembly — go-to-definition, find references, completion, diagnostics, rename, syntax highlighting",
+  "version": "0.1.0",
+  "license": "MIT",
+  "publisher": "rgbds-lsp",
+  "icon": "icon.png",
+  "galleryBanner": {
+    "color": "#0f380f",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TODO/rgbds-lsp"
+  },
+  "bugs": {
+    "url": "https://github.com/TODO/rgbds-lsp/issues"
+  },
+  "homepage": "https://github.com/TODO/rgbds-lsp#readme",
+  "keywords": [
+    "rgbds",
+    "gameboy",
+    "game boy",
+    "assembly",
+    "gbz80",
+    "sm83",
+    "lsp",
+    "language server"
+  ],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "languages": [
+      {
+        "id": "rgbds",
+        "aliases": ["RGBDS Assembly", "rgbds", "gbz80", "sm83"],
+        "extensions": [".asm", ".inc"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "rgbds",
+        "scopeName": "source.rgbds",
+        "path": "./syntaxes/rgbds.tmLanguage.json"
+      }
+    ],
+    "configuration": {
+      "title": "RGBDS Assembly",
+      "properties": {
+        "rgbds.maxDiagnostics": {
+          "type": "number",
+          "default": 200,
+          "description": "Maximum number of diagnostics per file"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "clean": "rm -rf out",
+    "vscode:prepublish": "npm run build",
+    "package": "vsce package"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.75.0",
+    "@vscode/vsce": "^3.0.0"
+  }
+}

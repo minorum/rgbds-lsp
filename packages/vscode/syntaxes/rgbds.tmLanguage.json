@@ -1,0 +1,141 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "RGBDS Assembly",
+    "scopeName": "source.rgbds",
+    "patterns": [
+        { "include": "#comment" },
+        { "include": "#label" },
+        { "include": "#directive" },
+        { "include": "#instruction" },
+        { "include": "#string" },
+        { "include": "#number" },
+        { "include": "#register" },
+        { "include": "#operator" }
+    ],
+    "repository": {
+        "comment": {
+            "patterns": [
+                {
+                    "name": "comment.line.semicolon.rgbds",
+                    "match": ";.*$"
+                },
+                {
+                    "name": "comment.block.rgbds",
+                    "begin": "/\\*",
+                    "end": "\\*/"
+                }
+            ]
+        },
+        "label": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.local.rgbds",
+                    "match": "^(\\.[a-zA-Z_][a-zA-Z0-9_]*)\\s*:?:?"
+                },
+                {
+                    "name": "entity.name.function.rgbds",
+                    "match": "^([a-zA-Z_][a-zA-Z0-9_]*)\\s*::"
+                },
+                {
+                    "name": "entity.name.function.rgbds",
+                    "match": "^([a-zA-Z_][a-zA-Z0-9_]*)\\s*:"
+                }
+            ]
+        },
+        "directive": {
+            "patterns": [
+                {
+                    "name": "keyword.control.directive.rgbds",
+                    "match": "(?i)\\b(SECTION|ENDSECTION|INCLUDE|INCBIN|MACRO|ENDM|IF|ELIF|ELSE|ENDC|REPT|ENDR|FOR|BREAK|UNION|NEXTU|ENDU)\\b"
+                },
+                {
+                    "name": "keyword.other.directive.rgbds",
+                    "match": "(?i)\\b(DEF|REDEF|EQU|EQUS|SET|EXPORT|GLOBAL|PURGE|CHARMAP|NEWCHARMAP|SETCHARMAP|ASSERT|STATIC_ASSERT|WARN|FAIL|PRINT|PRINTLN|OPT|PUSHS|POPS|PUSHO|POPO|PUSHC|POPC|SHIFT|FRAGMENT)\\b"
+                },
+                {
+                    "name": "keyword.other.data.rgbds",
+                    "match": "(?i)\\b(DB|DW|DL|DS)\\b"
+                },
+                {
+                    "name": "keyword.other.section-type.rgbds",
+                    "match": "(?i)\\b(ROM0|ROMX|VRAM|SRAM|WRAM0|WRAMX|OAM|HRAM|BANK|ALIGN)\\b"
+                }
+            ]
+        },
+        "instruction": {
+            "patterns": [
+                {
+                    "name": "keyword.mnemonic.rgbds",
+                    "match": "(?i)\\b(adc|add|and|bit|call|ccf|cp|cpl|daa|dec|di|ei|halt|inc|jp|jr|ld|ldh|ldi|ldd|nop|or|pop|push|res|ret|reti|rl|rla|rlc|rlca|rr|rra|rrc|rrca|rst|sbc|scf|set|sla|sra|srl|stop|sub|swap|xor)\\b"
+                }
+            ]
+        },
+        "register": {
+            "patterns": [
+                {
+                    "name": "variable.language.register.rgbds",
+                    "match": "(?i)\\b(af|bc|de|hl|sp|a|b|c|d|e|h|l)\\b"
+                },
+                {
+                    "name": "keyword.other.condition.rgbds",
+                    "match": "(?i)\\b(nz|z|nc)\\b"
+                }
+            ]
+        },
+        "number": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.hex.rgbds",
+                    "match": "\\$[0-9a-fA-F]+"
+                },
+                {
+                    "name": "constant.numeric.hex.rgbds",
+                    "match": "0[xX][0-9a-fA-F]+"
+                },
+                {
+                    "name": "constant.numeric.binary.rgbds",
+                    "match": "%[01]+"
+                },
+                {
+                    "name": "constant.numeric.binary.rgbds",
+                    "match": "0[bB][01]+"
+                },
+                {
+                    "name": "constant.numeric.octal.rgbds",
+                    "match": "&[0-7]+"
+                },
+                {
+                    "name": "constant.numeric.decimal.rgbds",
+                    "match": "\\b[0-9]+\\b"
+                }
+            ]
+        },
+        "string": {
+            "patterns": [
+                {
+                    "name": "string.quoted.double.rgbds",
+                    "begin": "\"",
+                    "end": "\"",
+                    "patterns": [
+                        {
+                            "name": "constant.character.escape.rgbds",
+                            "match": "\\\\."
+                        },
+                        {
+                            "name": "variable.other.interpolation.rgbds",
+                            "match": "\\{[^}]*\\}"
+                        }
+                    ]
+                }
+            ]
+        },
+        "operator": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.rgbds",
+                    "match": "\\+\\+|<<|>>|>>>|\\*\\*|==|!=|<=|>=|&&|\\|\\||[+\\-*/%&|^~!<>]"
+                }
+            ]
+        }
+    }
+}

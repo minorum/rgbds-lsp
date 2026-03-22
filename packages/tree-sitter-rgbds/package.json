@@ -1,0 +1,38 @@
+{
+  "name": "tree-sitter-rgbds",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for RGBDS Game Boy assembly",
+  "license": "MIT",
+  "keywords": ["tree-sitter", "rgbds", "gameboy", "assembly", "parser", "gbz80", "sm83"],
+  "main": "bindings/node",
+  "types": "bindings/node/index.d.ts",
+  "files": [
+    "grammar.js",
+    "binding.gyp",
+    "prebuilds/**",
+    "bindings/node/*",
+    "queries/*",
+    "src/**",
+    "*.wasm"
+  ],
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter test",
+    "build-wasm": "tree-sitter build --wasm",
+    "parse": "tree-sitter parse"
+  },
+  "dependencies": {
+    "node-addon-api": "^8.0.0",
+    "node-gyp-build": "^4.8.0"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "^0.25.0"
+  },
+  "tree-sitter": [
+    {
+      "scope": "source.rgbds",
+      "file-types": ["asm", "inc"],
+      "injection-regex": "^(rgbds|gbz80|sm83)$"
+    }
+  ]
+}

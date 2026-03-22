@@ -1,0 +1,103 @@
+================================================================================
+Global label
+================================================================================
+
+MainLoop:
+    nop
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (global_label
+        (identifier))))
+  (line
+    (instruction
+      (mnemonic))))
+
+================================================================================
+Exported global label
+================================================================================
+
+ExportedSymbol::
+    ret
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (global_label
+        (identifier))))
+  (line
+    (instruction
+      (mnemonic))))
+
+================================================================================
+Local label with colon
+================================================================================
+
+.loop:
+    jr nz, .loop
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (local_label
+        (local_identifier))))
+  (line
+    (instruction
+      (mnemonic)
+      (operand_list
+        (operand
+          (condition))
+        (operand
+          (expression
+            (symbol_reference
+              (local_identifier))))))))
+
+================================================================================
+Local label without colon
+================================================================================
+
+.done
+    ret
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (local_label
+        (local_identifier))))
+  (line
+    (instruction
+      (mnemonic))))
+
+================================================================================
+Label with instruction on same line
+================================================================================
+
+WaitVBlank: halt
+    nop
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (global_label
+        (identifier)))
+    (instruction
+      (mnemonic)))
+  (line
+    (instruction
+      (mnemonic))))
