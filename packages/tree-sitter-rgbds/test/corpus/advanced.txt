@@ -1,8 +1,10 @@
 ================================================================================
-Simple instruction
+RS counter directives
 ================================================================================
 
-    nop
+rsreset
+def FACE_LEFT rb 1
+def FACE_RIGHT rb 1
 
 --------------------------------------------------------------------------------
 
@@ -10,14 +12,82 @@ Simple instruction
   (line)
   (line
     (statement
-      (instruction
-        (mnemonic)))))
+      (directive
+        (rsreset_directive))))
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number))))))
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))
 
 ================================================================================
-Load instruction
+Binary with underscores
 ================================================================================
 
-    ld a, b
+DEF flags EQU %00_11_0000
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))
+
+================================================================================
+Macro unique suffix
+================================================================================
+
+def myLabel\@ equs "hello"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (string)))))))
+
+================================================================================
+Symbol interpolation
+================================================================================
+
+    db {MY_CONST}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (data_directive
+          (expression_list
+            (expression
+              (interpolation))))))))
+
+================================================================================
+Current PC address
+================================================================================
+
+    jr @+$6d
 
 --------------------------------------------------------------------------------
 
@@ -28,91 +98,10 @@ Load instruction
       (instruction
         (mnemonic)
         (operand_list
-          (operand
-            (register))
-          (operand
-            (register)))))))
-
-================================================================================
-Memory operand
-================================================================================
-
-    ld a, [hl]
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (instruction
-        (mnemonic)
-        (operand_list
-          (operand
-            (register))
-          (operand
-            (memory_operand
-              (register))))))))
-
-================================================================================
-Immediate value
-================================================================================
-
-    ld a, $FF
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (instruction
-        (mnemonic)
-        (operand_list
-          (operand
-            (register))
           (operand
             (expression
-              (number))))))))
-
-================================================================================
-Call with label
-================================================================================
-
-    call MainLoop
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (instruction
-        (mnemonic)
-        (operand_list
-          (operand
-            (expression
-              (symbol_reference
-                (identifier)))))))))
-
-================================================================================
-Conditional jump
-================================================================================
-
-    jp nz, .loop
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (instruction
-        (mnemonic)
-        (operand_list
-          (operand
-            (condition))
-          (operand
-            (expression
-              (symbol_reference
-                (local_identifier)))))))))
+              (binary_expression
+                (expression
+                  (symbol_reference))
+                (expression
+                  (number))))))))))

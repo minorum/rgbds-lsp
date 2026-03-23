@@ -1,0 +1,357 @@
+================================================================================
+Condition c (fix #1)
+================================================================================
+
+    jp c, label
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (condition))
+          (operand
+            (expression
+              (symbol_reference
+                (identifier)))))))))
+
+================================================================================
+All four conditions
+================================================================================
+
+    jp z, .a
+    jp nz, .b
+    jp c, .c
+    jp nc, .d
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand (condition))
+          (operand (expression (symbol_reference (local_identifier))))))))
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand (condition))
+          (operand (expression (symbol_reference (local_identifier))))))))
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand (condition))
+          (operand (expression (symbol_reference (local_identifier))))))))
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand (condition))
+          (operand (expression (symbol_reference (local_identifier)))))))))
+
+================================================================================
+Negated condition (fix #2)
+================================================================================
+
+    jr !nz, .skip
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (negated_condition
+              (condition)))
+          (operand
+            (expression
+              (symbol_reference
+                (local_identifier)))))))))
+
+================================================================================
+SP offset restricted to sp only (fix #3)
+================================================================================
+
+    ld hl, sp+$02
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (sp_offset
+              (sp_register)
+              (expression
+                (number)))))))))
+
+================================================================================
+Multiple statements on one line (fix #4)
+================================================================================
+
+    ld a, b :: inc b :: ret
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand (register))
+          (operand (register)))))
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand (register)))))
+    (statement
+      (instruction
+        (mnemonic)))))
+
+================================================================================
+Scoped label definition (fix #6)
+================================================================================
+
+AnotherGlobal.with_local:
+    ret
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (global_label
+        (scoped_identifier))))
+  (line
+    (statement
+      (instruction
+        (mnemonic)))))
+
+================================================================================
+SECTION UNION modifier (fix #7)
+================================================================================
+
+SECTION UNION "Overlap", WRAM0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (section_directive
+          (string)
+          (section_type))))))
+
+================================================================================
+SECTION FRAGMENT modifier (fix #7)
+================================================================================
+
+SECTION FRAGMENT "Part1", ROM0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (section_directive
+          (string)
+          (section_type))))))
+
+================================================================================
+LOAD directive (fix #8)
+================================================================================
+
+LOAD "RAM Code", WRAM0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (load_directive
+          (string)
+          (section_type))))))
+
+================================================================================
+ENDL directive (fix #8)
+================================================================================
+
+ENDL
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (endl_directive)))))
+
+================================================================================
+Line continuation (fix #9)
+================================================================================
+
+    ld a, \
+    $FF
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (line_continuation)
+          (operand
+            (expression
+              (number))))))))
+
+================================================================================
+Fixed-point number (fix #10)
+================================================================================
+
+DEF angle EQU 12.34
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))
+
+================================================================================
+Fixed-point with precision (fix #10)
+================================================================================
+
+DEF val EQU 1.5q8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))
+
+================================================================================
+Graphics literal (fix #10)
+================================================================================
+
+    db `01230123
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (data_directive
+          (expression_list
+            (expression
+              (gfx_literal))))))))
+
+================================================================================
+SP as standalone operand
+================================================================================
+
+    inc sp
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (sp_register)))))))
+
+================================================================================
+Current PC address with @
+================================================================================
+
+    jr @+$6d
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (expression
+              (binary_expression
+                (expression
+                  (symbol_reference))
+                (expression
+                  (number))))))))))
+
+================================================================================
+Identifier with hash and at
+================================================================================
+
+DEF my#var EQU 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))

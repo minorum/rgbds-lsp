@@ -81,16 +81,21 @@ export class Indexer {
         let currentGlobal = '';
 
         for (const lineNode of tree.rootNode.children) {
-            if (lineNode.type !== 'line') continue;
+            // Handle both 'line' and 'final_line' (EOF without newline)
+            if (lineNode.type !== 'line' && lineNode.type !== 'final_line') continue;
 
             for (const child of lineNode.children) {
                 if (child.type === 'label_definition') {
                     this.extractLabel(uri, child, currentGlobal);
-                    // Update current global scope
                     const labelNode = child.firstChild;
                     if (labelNode?.type === 'global_label') {
                         const nameNode = labelNode.childForFieldName('name');
                         if (nameNode) currentGlobal = nameNode.text;
+                    }
+                } else if (child.type === 'statement') {
+                    // Unwrap the statement node to reach the actual content
+                    for (const stmt of child.children) {
+                        this.processStatement(uri, stmt, currentGlobal);
                     }
                 } else if (child.type === 'directive') {
                     this.extractDirectiveSymbols(uri, child, currentGlobal);
@@ -100,6 +105,16 @@ export class Indexer {
                     this.extractReferences(uri, child, currentGlobal);
                 }
             }
+        }
+    }
+
+    private processStatement(uri: string, node: Parser.SyntaxNode, currentGlobal: string): void {
+        if (node.type === 'directive') {
+            this.extractDirectiveSymbols(uri, node, currentGlobal);
+        } else if (node.type === 'instruction') {
+            this.extractReferences(uri, node, currentGlobal);
+        } else if (node.type === 'macro_invocation') {
+            this.extractReferences(uri, node, currentGlobal);
         }
     }
 

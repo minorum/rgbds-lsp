@@ -1,49 +1,8 @@
 ================================================================================
-Section directive
+Exponentiation is right-associative
 ================================================================================
 
-SECTION "Main", ROM0[$0100]
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (directive
-        (section_directive
-          (string)
-          (section_type)
-          (expression
-            (number)))))))
-
-================================================================================
-Data bytes
-================================================================================
-
-    db $01, $02, $03
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (directive
-        (data_directive
-          (expression_list
-            (expression
-              (number))
-            (expression
-              (number))
-            (expression
-              (number))))))))
-
-================================================================================
-EQU constant with DEF
-================================================================================
-
-DEF PLAYER_HP EQU $C100
+DEF x EQU 2 ** 3 ** 2
 
 --------------------------------------------------------------------------------
 
@@ -55,13 +14,21 @@ DEF PLAYER_HP EQU $C100
         (constant_directive
           (identifier)
           (expression
-            (number)))))))
+            (binary_expression
+              (expression
+                (number))
+              (expression
+                (binary_expression
+                  (expression
+                    (number))
+                  (expression
+                    (number)))))))))))
 
 ================================================================================
-Legacy EQU constant
+Unsigned right shift
 ================================================================================
 
-MAX_HEALTH EQU 100
+DEF x EQU $FF >>> 4
 
 --------------------------------------------------------------------------------
 
@@ -73,13 +40,17 @@ MAX_HEALTH EQU 100
         (constant_directive
           (identifier)
           (expression
-            (number)))))))
+            (binary_expression
+              (expression
+                (number))
+              (expression
+                (number)))))))))
 
 ================================================================================
-Include directive
+ASSERT with severity
 ================================================================================
 
-INCLUDE "ram/wram.asm"
+ASSERT WARN, x == 1, "bad value"
 
 --------------------------------------------------------------------------------
 
@@ -88,27 +59,71 @@ INCLUDE "ram/wram.asm"
   (line
     (statement
       (directive
-        (include_directive
-          (string))))))
+        (assert_directive
+          (expression
+            (binary_expression
+              (expression
+                (symbol_reference
+                  (identifier)))
+              (expression
+                (number))))
+          (expression
+            (string)))))))
 
 ================================================================================
-Comment line
+STATIC_ASSERT with FATAL
 ================================================================================
 
-; This is a comment
+STATIC_ASSERT FATAL, BANK(@) == 0
 
 --------------------------------------------------------------------------------
 
 (source_file
   (line)
   (line
-    (comment)))
+    (statement
+      (directive
+        (assert_directive
+          (expression
+            (binary_expression
+              (expression
+                (function_call
+                  (identifier)
+                  (expression_list
+                    (expression
+                      (symbol_reference)))))
+              (expression
+                (number)))))))))
 
 ================================================================================
-Inline comment
+WARN with string expression
 ================================================================================
 
-    ld a, 1 ; load accumulator
+    WARN STRFMT("val=%d", x)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (warn_directive
+          (expression
+            (function_call
+              (identifier)
+              (expression_list
+                (expression
+                  (string))
+                (expression
+                  (symbol_reference
+                    (identifier)))))))))))
+
+================================================================================
+RL instruction still works
+================================================================================
+
+    rl c
 
 --------------------------------------------------------------------------------
 
@@ -120,19 +135,13 @@ Inline comment
         (mnemonic)
         (operand_list
           (operand
-            (register))
-          (operand
-            (expression
-              (number))))))
-    (comment)))
+            (condition)))))))
 
 ================================================================================
-Macro boundary markers
+Raw string literal
 ================================================================================
 
-MACRO WaitVBlank
-    halt
-ENDM
+DEF x EQUS #"hello\nworld"
 
 --------------------------------------------------------------------------------
 
@@ -141,45 +150,44 @@ ENDM
   (line
     (statement
       (directive
-        (macro_start
-          (identifier)))))
-  (line
-    (statement
-      (instruction
-        (mnemonic))))
-  (line
-    (statement
-      (directive
-        (endm_directive)))))
-
-================================================================================
-Conditional boundary markers
-================================================================================
-
-IF DEF(MY_FLAG)
-    nop
-ENDC
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (directive
-        (if_directive
+        (constant_directive
+          (identifier)
           (expression
-            (function_call
-              (identifier)
-              (expression_list
-                (expression
-                  (symbol_reference
-                    (identifier))))))))))
-  (line
-    (statement
-      (instruction
-        (mnemonic))))
+            (string)))))))
+
+================================================================================
+Raw identifier escaping keyword
+================================================================================
+
+DEF #if EQU 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
   (line
     (statement
       (directive
-        (endc_directive)))))
+        (constant_directive
+          (raw_identifier)
+          (expression
+            (number)))))))
+
+================================================================================
+Hex color in macro argument
+================================================================================
+
+    rgb #F8F8A8
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (macro_invocation
+        (identifier)
+        (expression_list
+          (expression
+            (symbol_reference
+              (equs_string_ref))))))))
