@@ -3,7 +3,7 @@ import * as fs from 'fs';
 
 export function uriToPath(uri: string): string {
     if (uri.startsWith('file:///')) {
-        let p = uri.substring(8);
+        let p = decodeURIComponent(uri.substring(8));
         if (path.sep === '\\') {
             p = p.replace(/\//g, '\\');
         }

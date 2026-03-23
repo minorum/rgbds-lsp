@@ -6,7 +6,6 @@ import {
     TransportKind,
 } from 'vscode-languageclient/node';
 import { execSync } from 'child_process';
-import * as path from 'path';
 
 let client: LanguageClient;
 
@@ -15,12 +14,13 @@ function findServer(): string | null {
     const configPath = workspace.getConfiguration('rgbds').get<string>('serverPath');
     if (configPath) return configPath;
 
-    // 2. Try to resolve from globally installed package
+    // 2. Try to resolve from globally installed npm package
     try {
-        return execSync('node -e "process.stdout.write(require.resolve(\'@minorum/rgbds-language-server\'))"', {
+        const globalRoot = execSync('npm root -g', {
             encoding: 'utf-8',
             timeout: 5000,
         }).trim();
+        return require.resolve('@minorum/rgbds-language-server', { paths: [globalRoot] });
     } catch {}
 
     return null;

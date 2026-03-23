@@ -65,6 +65,8 @@ connection.onInitialize((params: InitializeParams) => {
 connection.onInitialized(() => {
     connection.console.log('RGBDS Language Server initialized');
 
+    rgbdsIndexer.onLog = (msg) => connection.console.log(msg);
+
     // Index workspace folders in the background after the handshake completes
     const folders = [...pendingWorkspaceFolders];
     pendingWorkspaceFolders = [];
@@ -72,6 +74,13 @@ connection.onInitialized(() => {
         for (const folderPath of folders) {
             const result = await rgbdsIndexer.indexProjectAsync(folderPath);
             connection.console.log(`Indexed workspace: ${folderPath} (${rgbdsIndexer.definitions.size} definitions, ${result.indexed} files)`);
+        }
+        // Refresh diagnostics for all open documents now that indexing is complete
+        for (const doc of documents.all()) {
+            connection.sendDiagnostics({
+                uri: doc.uri,
+                diagnostics: computeDiagnostics(doc),
+            });
         }
     })();
 });

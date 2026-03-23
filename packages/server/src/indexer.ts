@@ -9,6 +9,7 @@ const rgbdsLanguage = require('@minorum/tree-sitter-rgbds');
 export class Indexer {
     public definitions: Map<string, SymbolDef> = new Map();
     public references: Map<string, SymbolRef[]> = new Map();
+    public onLog: ((message: string) => void) | null = null;
 
     private parser: Parser;
     private trees: Map<string, Parser.Tree> = new Map();
@@ -18,6 +19,10 @@ export class Indexer {
     constructor() {
         this.parser = new Parser();
         this.parser.setLanguage(rgbdsLanguage);
+    }
+
+    private log(message: string): void {
+        if (this.onLog) this.onLog(message);
     }
 
     public getIndexedFileUris(): string[] {
@@ -89,6 +94,7 @@ export class Indexer {
 
     public async indexProjectAsync(rootDir: string): Promise<{ indexed: number; failed: number }> {
         const files = collectRgbdsFiles(rootDir);
+        this.log(`Found ${files.length} .asm/.inc files in ${rootDir}`);
         let indexed = 0;
         let failed = 0;
 
@@ -102,8 +108,14 @@ export class Indexer {
                 this.indexedFileUris.add(uri);
                 this.extractSymbols(uri, tree);
                 indexed++;
-            } catch {
+            } catch (e) {
+                this.log(`Failed to index: ${files[i]} (${e})`);
                 failed++;
+            }
+
+            // Log progress every 50 files
+            if (indexed % 50 === 0 && indexed > 0) {
+                this.log(`Indexing progress: ${indexed}/${files.length} files (${this.definitions.size} definitions so far)`);
             }
 
             // Yield to the event loop after every file so LSP requests can be served
