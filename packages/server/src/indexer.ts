@@ -72,7 +72,7 @@ export class Indexer {
         const files = collectRgbdsFiles(rootDir);
         let indexed = 0;
         let failed = 0;
-        const BATCH_SIZE = 10;
+        const BATCH_SIZE = 20;
 
         for (let i = 0; i < files.length; i++) {
             try {
@@ -82,6 +82,7 @@ export class Indexer {
                 this.trees.set(uri, tree);
                 this.fileContents.set(uri, content);
                 this.indexedFileUris.add(uri);
+                this.extractSymbols(uri, tree);
                 indexed++;
             } catch {
                 failed++;
@@ -93,7 +94,6 @@ export class Indexer {
             }
         }
 
-        this.rebuildIndex();
         return { indexed, failed };
     }
 

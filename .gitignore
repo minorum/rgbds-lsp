@@ -20,6 +20,7 @@ build/
 config.gypi
 .DS_Store
 package-lock.json
+_temp_repos/
 
 # tree-sitter generated (keep grammar.js and test corpus, regenerate the rest)
 packages/tree-sitter-rgbds/src/parser.c

@@ -9,7 +9,7 @@ on:
 jobs:
   grammar:
     name: Tree-sitter Grammar
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v4
 
@@ -30,7 +30,7 @@ jobs:
 
   server:
     name: Language Server
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-slim
     needs: grammar
     steps:
       - uses: actions/checkout@v4
@@ -53,9 +53,43 @@ jobs:
         working-directory: packages/server
         run: npx tsc -p tsconfig.json
 
+      - name: Run integration tests
+        working-directory: packages/server
+        run: npx vitest run tests/integration.test.ts
+
+  server-real-project:
+    name: Real Project Tests
+    runs-on: ubuntu-slim
+    needs: server
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install tree-sitter CLI
+        run: npm install -g tree-sitter-cli
+
+      - name: Generate parser
+        working-directory: packages/tree-sitter-rgbds
+        run: tree-sitter generate
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build server
+        working-directory: packages/server
+        run: npx tsc -p tsconfig.json
+
+      - name: Run real project tests (pokecrystal)
+        working-directory: packages/server
+        run: npx vitest run tests/real-project.test.ts
+        timeout-minutes: 5
+
   vscode:
     name: VS Code Extension
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-slim
     steps:
       - uses: actions/checkout@v4
 
