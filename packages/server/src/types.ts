@@ -8,6 +8,8 @@ export interface SymbolDef {
     isLocal: boolean;
     isExported: boolean;
     parentLabel?: string;
+    docComment?: string;
+    value?: string;
 }
 
 export interface SymbolRef {

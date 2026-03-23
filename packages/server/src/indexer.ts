@@ -2,9 +2,34 @@ import Parser from 'tree-sitter';
 import { SymbolDef, SymbolRef } from './types';
 import { pathToUri, collectRgbdsFiles } from './utils';
 import * as fs from 'fs';
+import * as path from 'path';
+import * as crypto from 'crypto';
 
 // Load tree-sitter-rgbds grammar
 const rgbdsLanguage = require('@minorum/tree-sitter-rgbds');
+
+const CACHE_VERSION = 1;
+const CACHE_DIR = path.join(require('os').homedir(), '.rgbds-lsp', 'cache');
+
+interface CacheEntry {
+    hash: string;
+    definitions: [string, SymbolDef][];
+    references: [string, SymbolRef[]][];
+}
+
+interface CacheFile {
+    version: number;
+    files: { [filePath: string]: CacheEntry };
+}
+
+function contentHash(content: string): string {
+    return crypto.createHash('md5').update(content).digest('hex');
+}
+
+function cachePath(rootDir: string): string {
+    const key = crypto.createHash('md5').update(rootDir).digest('hex');
+    return path.join(CACHE_DIR, `${key}.json`);
+}
 
 export class Indexer {
     public definitions: Map<string, SymbolDef> = new Map();
@@ -95,34 +120,112 @@ export class Indexer {
     public async indexProjectAsync(rootDir: string): Promise<{ indexed: number; failed: number }> {
         const files = collectRgbdsFiles(rootDir);
         this.log(`Found ${files.length} .asm/.inc files in ${rootDir}`);
+
+        // Load cache
+        const cacheFile = cachePath(rootDir);
+        const cache = this.loadCache(cacheFile);
         let indexed = 0;
+        let cached = 0;
         let failed = 0;
 
         for (let i = 0; i < files.length; i++) {
             try {
                 const content = fs.readFileSync(files[i], 'utf-8');
                 const uri = pathToUri(files[i]);
-                const tree = this.parser.parse(content);
-                this.trees.set(uri, tree);
+                const hash = contentHash(content);
                 this.fileContents.set(uri, content);
                 this.indexedFileUris.add(uri);
-                this.extractSymbols(uri, tree);
-                indexed++;
+
+                // Check cache
+                const entry = cache?.files[files[i]];
+                if (entry && entry.hash === hash) {
+                    // Restore from cache — skip parsing
+                    for (const [name, def] of entry.definitions) {
+                        this.definitions.set(name, def);
+                    }
+                    for (const [name, refs] of entry.references) {
+                        const existing = this.references.get(name);
+                        if (existing) {
+                            existing.push(...refs);
+                        } else {
+                            this.references.set(name, [...refs]);
+                        }
+                    }
+                    cached++;
+                } else {
+                    // Parse and extract
+                    const tree = this.parser.parse(content);
+                    this.trees.set(uri, tree);
+                    this.extractSymbols(uri, tree);
+                    indexed++;
+                }
             } catch (e) {
                 this.log(`Failed to index: ${files[i]} (${e})`);
                 failed++;
             }
 
             // Log progress every 50 files
-            if (indexed % 50 === 0 && indexed > 0) {
-                this.log(`Indexing progress: ${indexed}/${files.length} files (${this.definitions.size} definitions so far)`);
+            const total = indexed + cached;
+            if (total % 50 === 0 && total > 0) {
+                this.log(`Indexing progress: ${total}/${files.length} files (${cached} cached, ${this.definitions.size} definitions so far)`);
             }
 
-            // Yield to the event loop after every file so LSP requests can be served
-            await new Promise(resolve => setImmediate(resolve));
+            // Yield to the event loop every 10 files so LSP requests can be served
+            if (i % 10 === 0) {
+                await new Promise(resolve => setImmediate(resolve));
+            }
         }
 
-        return { indexed, failed };
+        // Save cache for next startup
+        this.saveCache(cacheFile, files);
+        this.log(`Cache: ${cached} files from cache, ${indexed} parsed fresh`);
+
+        return { indexed: indexed + cached, failed };
+    }
+
+    private loadCache(cachePath: string): CacheFile | null {
+        try {
+            const raw = fs.readFileSync(cachePath, 'utf-8');
+            const data = JSON.parse(raw) as CacheFile;
+            if (data.version !== CACHE_VERSION) return null;
+            return data;
+        } catch {
+            return null;
+        }
+    }
+
+    private saveCache(cachePath: string, files: string[]): void {
+        const cache: CacheFile = { version: CACHE_VERSION, files: {} };
+
+        for (const filePath of files) {
+            const uri = pathToUri(filePath);
+            const content = this.fileContents.get(uri);
+            if (!content) continue;
+
+            // Collect definitions and references for this file
+            const fileDefs: [string, SymbolDef][] = [];
+            for (const [name, def] of this.definitions) {
+                if (def.file === uri) fileDefs.push([name, def]);
+            }
+            const fileRefs: [string, SymbolRef[]][] = [];
+            for (const [name, refs] of this.references) {
+                const fileOnly = refs.filter(r => r.file === uri);
+                if (fileOnly.length > 0) fileRefs.push([name, fileOnly]);
+            }
+
+            cache.files[filePath] = {
+                hash: contentHash(content),
+                definitions: fileDefs,
+                references: fileRefs,
+            };
+        }
+
+        try {
+            fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+            fs.writeFileSync(cachePath, JSON.stringify(cache));
+        } catch (e) {
+            this.log(`Failed to write cache: ${e}`);
+        }
     }
 
     private rebuildIndex(): void {
@@ -136,26 +239,47 @@ export class Indexer {
 
     private extractSymbols(uri: string, tree: Parser.Tree): void {
         let currentGlobal = '';
+        let pendingComments: string[] = [];
 
         for (const lineNode of tree.rootNode.children) {
             // Handle both 'line' and 'final_line' (EOF without newline)
             if (lineNode.type !== 'line' && lineNode.type !== 'final_line') continue;
 
-            for (const child of lineNode.children) {
+            // Check if this line is comment-only or blank
+            const namedChildren = lineNode.namedChildren;
+            const hasComment = namedChildren.length === 1 && namedChildren[0].type === 'comment';
+            const isBlank = namedChildren.length === 0;
+
+            if (hasComment) {
+                const commentText = namedChildren[0].text;
+                // Strip leading ; and optional space
+                pendingComments.push(commentText.replace(/^;\s?/, ''));
+                continue;
+            }
+
+            if (isBlank) {
+                // Blank lines are OK — allow gaps between comments and definitions
+                continue;
+            }
+
+            // This line has code — attach pending comments to any definition found
+            const docComment = pendingComments.length > 0 ? pendingComments.join('\n') : undefined;
+            pendingComments = [];
+
+            for (const child of namedChildren) {
                 if (child.type === 'label_definition') {
-                    this.extractLabel(uri, child, currentGlobal);
+                    this.extractLabel(uri, child, currentGlobal, docComment);
                     const labelNode = child.firstChild;
                     if (labelNode?.type === 'global_label') {
                         const nameNode = labelNode.childForFieldName('name');
                         if (nameNode) currentGlobal = nameNode.text;
                     }
                 } else if (child.type === 'statement') {
-                    // Unwrap the statement node to reach the actual content
                     for (const stmt of child.children) {
-                        this.processStatement(uri, stmt, currentGlobal);
+                        this.processStatement(uri, stmt, currentGlobal, docComment);
                     }
                 } else if (child.type === 'directive') {
-                    this.extractDirectiveSymbols(uri, child, currentGlobal);
+                    this.extractDirectiveSymbols(uri, child, currentGlobal, docComment);
                 } else if (child.type === 'instruction') {
                     this.extractReferences(uri, child, currentGlobal);
                 } else if (child.type === 'macro_invocation') {
@@ -165,9 +289,9 @@ export class Indexer {
         }
     }
 
-    private processStatement(uri: string, node: Parser.SyntaxNode, currentGlobal: string): void {
+    private processStatement(uri: string, node: Parser.SyntaxNode, currentGlobal: string, docComment?: string): void {
         if (node.type === 'directive') {
-            this.extractDirectiveSymbols(uri, node, currentGlobal);
+            this.extractDirectiveSymbols(uri, node, currentGlobal, docComment);
         } else if (node.type === 'instruction') {
             this.extractReferences(uri, node, currentGlobal);
         } else if (node.type === 'macro_invocation') {
@@ -175,7 +299,7 @@ export class Indexer {
         }
     }
 
-    private extractLabel(uri: string, node: Parser.SyntaxNode, currentGlobal: string): void {
+    private extractLabel(uri: string, node: Parser.SyntaxNode, currentGlobal: string, docComment?: string): void {
         const labelNode = node.firstChild;
         if (!labelNode) return;
 
@@ -192,6 +316,7 @@ export class Indexer {
                 endCol: nameNode.endPosition.column,
                 isLocal: false,
                 isExported: labelNode.children.some(c => c.text === '::'),
+                docComment,
             });
         } else if (labelNode.type === 'local_label') {
             const nameNode = labelNode.childForFieldName('name');
@@ -208,11 +333,12 @@ export class Indexer {
                 isLocal: true,
                 isExported: false,
                 parentLabel: currentGlobal || undefined,
+                docComment,
             });
         }
     }
 
-    private extractDirectiveSymbols(uri: string, node: Parser.SyntaxNode, currentGlobal: string): void {
+    private extractDirectiveSymbols(uri: string, node: Parser.SyntaxNode, currentGlobal: string, docComment?: string): void {
         const directive = node.firstChild;
         if (!directive) return;
 
@@ -220,7 +346,9 @@ export class Indexer {
             const nameNode = directive.childForFieldName('name');
             if (!nameNode) return;
             const name = nameNode.text;
-            // Determine if EQU, EQUS, or SET
+            // Extract the value expression text
+            const exprNode = directive.namedChildren.find(c => c.type === 'expression');
+            const value = exprNode?.text;
             this.definitions.set(name, {
                 name,
                 type: 'constant',
@@ -230,6 +358,8 @@ export class Indexer {
                 endCol: nameNode.endPosition.column,
                 isLocal: false,
                 isExported: false,
+                docComment,
+                value,
             });
             // Extract references from the value expression
             for (const child of directive.children) {
@@ -249,6 +379,7 @@ export class Indexer {
                 endCol: nameNode.endPosition.column,
                 isLocal: false,
                 isExported: false,
+                docComment,
             });
         } else if (directive.type === 'section_directive') {
             // Extract section name from the string
@@ -265,6 +396,7 @@ export class Indexer {
                     endCol: stringNode.endPosition.column,
                     isLocal: false,
                     isExported: false,
+                    docComment,
                 });
             }
             // Extract references from expressions in section

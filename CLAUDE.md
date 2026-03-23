@@ -55,3 +55,19 @@ VS Code Extension  ──►  LSP Server  ──►  Tree-sitter Parser
 - **Symbol types**: `label`, `constant` (EQU/EQUS/SET), `macro`, `section`
 - **Incremental indexing**: On file change, only the changed file is re-indexed (`indexFile`). Full project scan happens at startup (`indexProject`).
 - **Diagnostics**: Warns on undefined symbol references. Max 200 per file.
+- **Indexer cache**: Stored in `~/.rgbds-lsp/cache/` keyed by workspace path hash. Clear cache after changing symbol extraction logic.
+
+## Versioning
+
+Each package is versioned independently — only bump packages that actually changed:
+- `packages/tree-sitter-rgbds` — bump only when `grammar.js` or parser output changes
+- `packages/server` — bump for server features, indexer changes, protocol additions
+- `packages/vscode` — bump for extension UI changes, new settings, or problem matchers (also bump when server changes require a new extension build)
+
+The server and extension versions should stay in sync since the extension bundles/depends on the server. The tree-sitter grammar version is independent.
+
+Version locations per package:
+- `packages/server/package.json`
+- `packages/vscode/package.json`
+- `packages/tree-sitter-rgbds/package.json` + `tree-sitter.json`
+- `.claude-plugin/plugin.json` — tracks the overall project, bump with the higher of server/extension

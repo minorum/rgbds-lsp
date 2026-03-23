@@ -2,7 +2,7 @@
   "name": "rgbds-lsp",
   "displayName": "RGBDS Assembly",
   "description": "Language support for RGBDS Game Boy assembly — go-to-definition, find references, completion, diagnostics, rename, syntax highlighting",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "license": "MIT",
   "publisher": "rgbds-lsp",
   "icon": "icon.png",
@@ -75,7 +75,33 @@
           "description": "Path to rgbds-language-server module. Leave empty to auto-detect from global install."
         }
       }
-    }
+    },
+    "problemMatchers": [
+      {
+        "name": "rgbdserror",
+        "owner": "rgbds",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?)\\((\\d+)\\):\\s+(warning|ERROR):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      },
+      {
+        "name": "rgbdslinkerror",
+        "owner": "rgbds",
+        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "pattern": {
+          "regexp": "^(.+?)\\((\\d+)\\):\\s+(warning|ERROR):\\s+(.*)$",
+          "file": 1,
+          "line": 2,
+          "severity": 3,
+          "message": 4
+        }
+      }
+    ]
   },
   "scripts": {
     "build": "npx esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node18",
