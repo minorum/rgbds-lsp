@@ -81,9 +81,12 @@ module.exports = grammar({
     ),
 
     global_label: $ => seq(
-      field('name', choice($.identifier, $.scoped_identifier)),
+      field('name', choice($.identifier, $.scoped_identifier, $.macro_label)),
       choice('::', ':'),
     ),
+
+    // Labels that begin with macro arguments: \1Moves::, \1Special::
+    macro_label: _ => /\\[1-9#@][a-zA-Z0-9_]*/,
 
     local_label: $ => choice(
       prec(2, seq(field('name', $.local_identifier), '::')),
@@ -191,6 +194,12 @@ module.exports = grammar({
       // Fix #8: LOAD / ENDL
       $.load_directive,
       $.endl_directive,
+      // RS counter directives
+      $.rsreset_directive,
+      $.rsset_directive,
+      $.rb_directive,
+      $.rw_directive,
+      $.rl_directive,
     ),
 
     // ─── Section ──────────────────────────────────────────────
@@ -220,9 +229,10 @@ module.exports = grammar({
 
     // ─── Data ─────────────────────────────────────────────────
 
+    // db/dw/dl/ds can appear without arguments (RAM variable declarations)
     data_directive: $ => seq(
       field('size', choice(ci_kw('DB'), ci_kw('DW'), ci_kw('DL'), ci_kw('DS'))),
-      $.expression_list,
+      optional($.expression_list),
     ),
 
     // ─── Constants ────────────────────────────────────────────
@@ -230,12 +240,14 @@ module.exports = grammar({
     constant_directive: $ => choice(
       seq(ci_kw('DEF'), field('name', $.identifier), ci_kw('EQU'), $.expression),
       seq(ci_kw('DEF'), field('name', $.identifier), ci_kw('EQUS'), $.expression),
-      seq(ci_kw('DEF'), field('name', $.identifier), choice('=', ci_kw('SET')), $.expression),
+      seq(ci_kw('DEF'), field('name', $.identifier), choice('=', '+=', '-=', '*=', '/=', '%=', '|=', '&=', '^=', '<<=', '>>=', ci_kw('SET')), $.expression),
+      seq(ci_kw('DEF'), field('name', $.identifier), choice(ci_kw('RB'), ci_kw('RW'), ci_kw('RL')), optional($.expression)),
       seq(ci_kw('REDEF'), field('name', $.identifier), ci_kw('EQUS'), $.expression),
       // Legacy (no DEF prefix)
       seq(field('name', $.identifier), ci_kw('EQU'), $.expression),
       seq(field('name', $.identifier), ci_kw('EQUS'), $.expression),
       seq(field('name', $.identifier), choice('=', ci_kw('SET')), $.expression),
+      seq(field('name', $.identifier), choice(ci_kw('RB'), ci_kw('RW'), ci_kw('RL')), optional($.expression)),
     ),
 
     // ─── Include / Incbin ─────────────────────────────────────
@@ -264,8 +276,9 @@ module.exports = grammar({
 
     // ─── Macro (flat boundary markers) ────────────────────────
 
+    // MACRO and MACRO? (conditional macro definition)
     macro_start: $ => seq(
-      ci_kw('MACRO'),
+      choice(token(prec(1, seq(ci('MACRO'), '?'))), ci_kw('MACRO')),
       field('name', $.identifier),
     ),
 
@@ -281,7 +294,10 @@ module.exports = grammar({
     // they can contain arbitrary text separated by commas
     macro_arg_list: $ => $.expression_list,
 
-    macro_arg: _ => /\\[1-9#@]/,
+    macro_arg: _ => choice(
+      /\\[1-9#@]/,       // \1 through \9, \#, \@
+      /\\<[0-9]+>/,      // \<10> and above
+    ),
 
     shift_directive: $ => seq(ci_kw('SHIFT'), optional($.expression)),
 
@@ -296,14 +312,13 @@ module.exports = grammar({
 
     rept_directive: $ => seq(ci_kw('REPT'), $.expression),
 
+    // FOR variable, start, stop[, step] OR FOR variable, count
     for_directive: $ => seq(
       ci_kw('FOR'),
       field('variable', $.identifier),
       ',',
       $.expression,
-      ',',
-      $.expression,
-      optional(seq(',', $.expression)),
+      repeat(seq(',', $.expression)),
     ),
 
     endr_directive: _ => ci_kw('ENDR'),
@@ -322,6 +337,14 @@ module.exports = grammar({
     ),
 
     endl_directive: _ => ci_kw('ENDL'),
+
+    // ─── RS counter directives ─────────────────────────────────
+
+    rsreset_directive: _ => ci_kw('RSRESET'),
+    rsset_directive: $ => seq(ci_kw('RSSET'), $.expression),
+    rb_directive: $ => seq(ci_kw('RB'), optional($.expression)),
+    rw_directive: $ => seq(ci_kw('RW'), optional($.expression)),
+    rl_directive: $ => seq(ci_kw('RL'), optional($.expression)),
 
     // ─── Charmap ──────────────────────────────────────────────
 
@@ -381,13 +404,25 @@ module.exports = grammar({
       $.unary_expression,
       $.parenthesized_expression,
       $.function_call,
+      $.interpolation,       // {symbol} curly-brace expansion
+      $.equs_expansion,      // number/expr followed by EQUS identifier (e.g. 2 percent)
       $.number,
       $.string,
       $.char_literal,
-      $.gfx_literal,    // Fix #10: backtick graphics literal
+      $.gfx_literal,         // Fix #10: backtick graphics literal
       $.symbol_reference,
       $.macro_arg,
     ),
+
+    // EQUS inline expansion: handles juxtaposed tokens from EQUS string expansion
+    // e.g. "2 percent" where percent EQUS "* $ff / 100"
+    equs_expansion: $ => prec.left(-1, seq(
+      choice($.number, $.macro_arg, $.parenthesized_expression),
+      $.identifier,
+    )),
+
+    // Symbol interpolation: {identifier} or {format:identifier}
+    interpolation: $ => seq('{', repeat(/[^}]/), '}'),
 
     binary_expression: $ => {
       /** @type {[string, number][]} */
@@ -419,62 +454,60 @@ module.exports = grammar({
 
     parenthesized_expression: $ => seq('(', $.expression, ')'),
 
+    // Function calls: identifier followed by ( args )
+    // Builtin functions (HIGH, LOW, BANK, etc.) are just identifiers syntactically
     function_call: $ => seq(
-      field('function', $.builtin_function),
+      field('function', $.identifier),
       '(',
       optional($.expression_list),
       ')',
     ),
 
-    builtin_function: _ => token(choice(
-      ...[
-        'HIGH', 'LOW', 'BANK', 'SIZEOF', 'STARTOF', 'DEF', 'ISCONST',
-        'STRLEN', 'STRCAT', 'STRCMP', 'STRIN', 'STRSUB', 'STRUPR', 'STRLWR',
-        'STRFMT', 'STRRPL', 'STRFIND', 'STRRFIND', 'STRSLICE', 'BYTELEN',
-        'STRBYTE', 'INCHARMAP', 'CHARLEN', 'CHARCMP', 'CHARSIZE', 'CHARVAL',
-        'BITWIDTH', 'TZCOUNT',
-        'SIN', 'COS', 'TAN', 'ASIN', 'ACOS', 'ATAN', 'ATAN2',
-        'MUL', 'DIV', 'FMOD', 'POW', 'LOG', 'ROUND', 'CEIL', 'FLOOR',
-      ].map(f => ci(f))
-    )),
-
     symbol_reference: $ => choice(
       $.identifier,
       $.scoped_identifier,   // Fix #6: Global.local as reference
       $.local_identifier,
+      $.macro_label,         // \1_Symbol references
+      $.equs_string_ref,    // #identifier — EQUS string expansion
       '@',                   // current PC address
       /:[+-]+/,              // anonymous label refs
     ),
 
+    // #identifier expands an EQUS symbol as a string value
+    equs_string_ref: _ => /#[a-zA-Z_][a-zA-Z0-9_]*/,
+
     // ─── Tokens ───────────────────────────────────────────────
 
     // Fix #5: RGBDS identifiers can start with [a-zA-Z_] and contain # @ in body
+    // \@ suffix allowed for macro-unique labels (e.g. myLabel\@)
     // Note: $ is NOT valid in identifiers — it's the hex prefix
     // Note: @ alone is the PC address symbol, not an identifier
-    identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*/,
+    identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*(\\@)?/,
 
     // Fix #6: scoped identifier with exactly one dot (Global.local)
-    scoped_identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*\.[a-zA-Z_][a-zA-Z0-9_#@]*/,
+    scoped_identifier: _ => /[a-zA-Z_][a-zA-Z0-9_#@]*\.[a-zA-Z_][a-zA-Z0-9_#@]*(\\@)?/,
 
     local_identifier: _ => /\.[a-zA-Z_][a-zA-Z0-9_]*/,
 
     // Fix #10: number literals including fixed-point
+    // RGBDS allows _ as visual separator in numeric literals
     number: _ => choice(
-      /\$[0-9a-fA-F]+/,            // hex: $FF
-      /0[xX][0-9a-fA-F]+/,         // hex: 0xFF
-      /%[01]+/,                     // binary: %1010
-      /0[bB][01]+/,                 // binary: 0b1010
-      /&[0-7]+/,                    // octal: &77
-      /0[oO][0-7]+/,               // octal: 0o77
+      /\$[0-9a-fA-F_]+/,           // hex: $FF, $FF_00
+      /0[xX][0-9a-fA-F_]+/,        // hex: 0xFF
+      /%[01_]+/,                    // binary: %1010, %00_11_0000
+      /0[bB][01_]+/,               // binary: 0b1010
+      /&[0-7_]+/,                   // octal: &77
+      /0[oO][0-7_]+/,              // octal: 0o77
       /[0-9]+\.[0-9]+[qQ][0-9]+/,  // fixed-point with precision: 12.34q8
       /[0-9]+\.[0-9]+/,            // fixed-point: 12.34
-      /[0-9]+/,                     // decimal
+      /[0-9][0-9_]*/,              // decimal: 100, 1_000
     ),
 
     char_literal: _ => seq("'", /[^'\r\n]/, "'"),
 
     // Fix #10: backtick graphics literal
-    gfx_literal: _ => /`[0-3]+/,
+    // Characters are configurable via `opt g`, default 0123 but can be any 4 chars
+    gfx_literal: _ => /`[^\s,;\r\n]+/,
 
     string: _ => seq('"', repeat(choice(/[^"\\\r\n]/, /\\./)), '"'),
   },

@@ -1,0 +1,364 @@
+================================================================================
+EOF without trailing newline (fix #11)
+================================================================================
+    nop
+--------------------------------------------------------------------------------
+
+(source_file
+  (final_line
+    (statement
+      (instruction
+        (mnemonic)))))
+
+================================================================================
+Macro invocation does not eat constants (fix #12)
+================================================================================
+
+MY_CONST EQU 42
+    ld a, MY_CONST
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number))))))
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (expression
+              (symbol_reference
+                (identifier)))))))))
+
+================================================================================
+Block comment
+================================================================================
+
+/* this is a
+   block comment */
+    nop
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (block_comment)
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)))))
+
+================================================================================
+Anonymous label definition and reference
+================================================================================
+
+:
+    jr nz, :-
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (anonymous_label)))
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (condition))
+          (operand
+            (expression
+              (symbol_reference))))))))
+
+================================================================================
+Hex with underscores
+================================================================================
+
+    ld a, $FF_00
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (register))
+          (operand
+            (expression
+              (number))))))))
+
+================================================================================
+FOR directive
+================================================================================
+
+FOR i, 0, 10
+ENDR
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (for_directive
+          (identifier)
+          (expression
+            (number))
+          (expression
+            (number))))))
+  (line
+    (statement
+      (directive
+        (endr_directive)))))
+
+================================================================================
+REPT directive
+================================================================================
+
+REPT 4
+    nop
+ENDR
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (rept_directive
+          (expression
+            (number))))))
+  (line
+    (statement
+      (instruction
+        (mnemonic))))
+  (line
+    (statement
+      (directive
+        (endr_directive)))))
+
+================================================================================
+EXPORT directive
+================================================================================
+
+EXPORT MySymbol, OtherSymbol
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (export_directive
+          (identifier)
+          (identifier))))))
+
+================================================================================
+INCBIN directive
+================================================================================
+
+INCBIN "data/tiles.bin", 0, 16
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (incbin_directive
+          (string)
+          (expression
+            (number))
+          (expression
+            (number)))))))
+
+================================================================================
+ASSERT directive
+================================================================================
+
+ASSERT BANK(@) == 0, "Must be in bank 0"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (assert_directive
+          (expression
+            (binary_expression
+              (expression
+                (function_call
+                  (identifier)
+                  (expression_list
+                    (expression
+                      (symbol_reference)))))
+              (expression
+                (number))))
+          (string))))))
+
+================================================================================
+PRINTLN directive
+================================================================================
+
+PRINTLN "Value: ", MY_VAR
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (print_directive
+          (expression_list
+            (expression
+              (string))
+            (expression
+              (symbol_reference
+                (identifier)))))))))
+
+================================================================================
+CHARMAP directive
+================================================================================
+
+CHARMAP "A", $41
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (charmap_directive
+          (string)
+          (expression_list
+            (expression
+              (number))))))))
+
+================================================================================
+Scoped reference in expression
+================================================================================
+
+    call MyFunc.init
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (expression
+              (symbol_reference
+                (scoped_identifier)))))))))
+
+================================================================================
+Graphics literal with custom opt g chars
+================================================================================
+
+    dw `.111111.
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (data_directive
+          (expression_list
+            (expression
+              (gfx_literal))))))))
+
+================================================================================
+DS with PC-relative expression
+================================================================================
+
+    ds $150 - @, 0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (data_directive
+          (expression_list
+            (expression
+              (binary_expression
+                (expression
+                  (number))
+                (expression
+                  (symbol_reference))))
+            (expression
+              (number))))))))
+
+================================================================================
+OPT directive
+================================================================================
+
+opt g.123
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (opt_directive)))))
+
+================================================================================
+DEF with SET
+================================================================================
+
+DEF counter SET 0
+DEF counter = 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number))))))
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))

@@ -1,0 +1,107 @@
+================================================================================
+RS counter directives
+================================================================================
+
+rsreset
+def FACE_LEFT rb 1
+def FACE_RIGHT rb 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (rsreset_directive))))
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number))))))
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))
+
+================================================================================
+Binary with underscores
+================================================================================
+
+DEF flags EQU %00_11_0000
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (number)))))))
+
+================================================================================
+Macro unique suffix
+================================================================================
+
+def myLabel\@ equs "hello"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (string)))))))
+
+================================================================================
+Symbol interpolation
+================================================================================
+
+    db {MY_CONST}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (data_directive
+          (expression_list
+            (expression
+              (interpolation))))))))
+
+================================================================================
+Current PC address
+================================================================================
+
+    jr @+$6d
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (expression
+              (binary_expression
+                (expression
+                  (symbol_reference))
+                (expression
+                  (number))))))))))

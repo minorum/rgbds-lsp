@@ -1,8 +1,45 @@
 ================================================================================
-Section directive
+DB without arguments (RAM variable)
 ================================================================================
 
-SECTION "Main", ROM0[$0100]
+wMyVar:: db
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (global_label
+        (identifier)))
+    (statement
+      (directive
+        (data_directive)))))
+
+================================================================================
+DW without arguments
+================================================================================
+
+wPointer:: dw
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (global_label
+        (identifier)))
+    (statement
+      (directive
+        (data_directive)))))
+
+================================================================================
+Conditional macro definition MACRO?
+================================================================================
+
+MACRO? flag_array
+ENDM
 
 --------------------------------------------------------------------------------
 
@@ -11,17 +48,57 @@ SECTION "Main", ROM0[$0100]
   (line
     (statement
       (directive
-        (section_directive
-          (string)
-          (section_type)
+        (macro_start
+          (identifier)))))
+  (line
+    (statement
+      (directive
+        (endm_directive)))))
+
+================================================================================
+DEF with compound assignment
+================================================================================
+
+DEF counter += 1
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
           (expression
             (number)))))))
 
 ================================================================================
-Data bytes
+Macro label with backslash arg
 ================================================================================
 
-    db $01, $02, $03
+\1Moves:: ds 4
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (label_definition
+      (global_label
+        (macro_label)))
+    (statement
+      (directive
+        (data_directive
+          (expression_list
+            (expression
+              (number))))))))
+
+================================================================================
+Numeric macro arg with angle brackets
+================================================================================
+
+    db \<10>, 0
 
 --------------------------------------------------------------------------------
 
@@ -33,17 +110,37 @@ Data bytes
         (data_directive
           (expression_list
             (expression
-              (number))
-            (expression
-              (number))
+              (macro_arg))
             (expression
               (number))))))))
 
 ================================================================================
-EQU constant with DEF
+EQUS string ref with hash
 ================================================================================
 
-DEF PLAYER_HP EQU $C100
+STRLEN(#MY_STRING)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (macro_invocation
+        (identifier)
+        (macro_arg_list
+          (expression_list
+            (expression
+              (parenthesized_expression
+                (expression
+                  (symbol_reference
+                    (equs_string_ref)))))))))))
+
+================================================================================
+Number EQUS expansion (percent pattern)
+================================================================================
+
+    db 2 percent
 
 --------------------------------------------------------------------------------
 
@@ -52,63 +149,18 @@ DEF PLAYER_HP EQU $C100
   (line
     (statement
       (directive
-        (constant_directive
-          (identifier)
-          (expression
-            (number)))))))
+        (data_directive
+          (expression_list
+            (expression
+              (equs_expansion
+                (number)
+                (identifier)))))))))
 
 ================================================================================
-Legacy EQU constant
+Function call with identifier
 ================================================================================
 
-MAX_HEALTH EQU 100
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (directive
-        (constant_directive
-          (identifier)
-          (expression
-            (number)))))))
-
-================================================================================
-Include directive
-================================================================================
-
-INCLUDE "ram/wram.asm"
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (directive
-        (include_directive
-          (string))))))
-
-================================================================================
-Comment line
-================================================================================
-
-; This is a comment
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (comment)))
-
-================================================================================
-Inline comment
-================================================================================
-
-    ld a, 1 ; load accumulator
+    ld a, LOW(wMyVar)
 
 --------------------------------------------------------------------------------
 
@@ -123,16 +175,19 @@ Inline comment
             (register))
           (operand
             (expression
-              (number))))))
-    (comment)))
+              (function_call
+                (identifier)
+                (expression_list
+                  (expression
+                    (symbol_reference
+                      (identifier))))))))))))
 
 ================================================================================
-Macro boundary markers
+FOR with two arguments
 ================================================================================
 
-MACRO WaitVBlank
-    halt
-ENDM
+FOR n, 8
+ENDR
 
 --------------------------------------------------------------------------------
 
@@ -141,45 +196,11 @@ ENDM
   (line
     (statement
       (directive
-        (macro_start
-          (identifier)))))
-  (line
-    (statement
-      (instruction
-        (mnemonic))))
-  (line
-    (statement
-      (directive
-        (endm_directive)))))
-
-================================================================================
-Conditional boundary markers
-================================================================================
-
-IF DEF(MY_FLAG)
-    nop
-ENDC
-
---------------------------------------------------------------------------------
-
-(source_file
-  (line)
-  (line
-    (statement
-      (directive
-        (if_directive
+        (for_directive
+          (identifier)
           (expression
-            (function_call
-              (identifier)
-              (expression_list
-                (expression
-                  (symbol_reference
-                    (identifier))))))))))
-  (line
-    (statement
-      (instruction
-        (mnemonic))))
+            (number))))))
   (line
     (statement
       (directive
-        (endc_directive)))))
+        (endr_directive)))))
