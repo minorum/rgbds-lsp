@@ -12,7 +12,6 @@ const INSTRUCTIONS = [
 
 // sp handled separately for sp+offset disambiguation
 const REGISTERS = ['a', 'b', 'c', 'd', 'e', 'h', 'l', 'af', 'bc', 'de', 'hl'];
-
 const CONDITIONS = ['z', 'nz', 'c', 'nc'];
 
 module.exports = grammar({
@@ -26,24 +25,19 @@ module.exports = grammar({
     source_file: $ => seq(repeat($.line), optional($.final_line)),
 
     // ─── Line structure ───────────────────────────────────────
-    // Shared body extracted to avoid line/final_line duplication.
 
-    line: $ => seq(
-      optional($.label_definition),
-      optional($.statement),
-      repeat(seq('::', $.statement)),
-      optional($.comment),
-      '\n',
-    ),
-
-    // EOF without trailing newline — must have at least one visible element.
-    // Cannot use a shared _line_content rule because tree-sitter forbids
-    // hidden rules that match empty strings.
-    final_line: $ => choice(
+    _nonempty_line_content: $ => choice(
       seq($.label_definition, optional($.statement), repeat(seq('::', $.statement)), optional($.comment)),
       seq($.statement, repeat(seq('::', $.statement)), optional($.comment)),
       $.comment,
     ),
+
+    line: $ => choice(
+      seq($._nonempty_line_content, '\n'),
+      '\n',
+    ),
+
+    final_line: $ => $._nonempty_line_content,
 
     statement: $ => choice($.instruction, $.directive, $.macro_invocation),
 
@@ -66,8 +60,8 @@ module.exports = grammar({
 
     macro_label: _ => /\\([1-9#@]|<[0-9]+>)[a-zA-Z0-9_]*(\{[^}\r\n]*\}[a-zA-Z0-9_]*)*/,
 
-    // Colon-less form (.name without :) is valid RGBDS syntax and heavily used
-    // in real codebases. Precedence ensures colon forms are preferred.
+    // Colon-less .name is valid RGBDS, heavily used in real codebases.
+    // Precedence ensures colon forms are preferred.
     local_label: $ => choice(
       prec(2, seq(field('name', $.local_identifier), '::')),
       prec(2, seq(field('name', $.local_identifier), ':')),
@@ -85,13 +79,8 @@ module.exports = grammar({
     operand_list: $ => seq($.operand, repeat(seq(',', $.operand))),
 
     operand: $ => choice(
-      $.sp_offset,
-      $.sp_register,
-      $.negated_condition,
-      $.register,
-      $.condition,
-      $.memory_operand,
-      $.expression,
+      $.sp_offset, $.sp_register, $.negated_condition,
+      $.register, $.condition, $.memory_operand, $.expression,
     ),
 
     sp_offset: $ => prec(2, seq($.sp_register, choice('+', '-'), $.expression)),
@@ -100,79 +89,47 @@ module.exports = grammar({
     condition: _ => token(choice(...CONDITIONS.map(c => ci(c)))),
     negated_condition: $ => seq('!', $.condition),
 
-    // SM83 legal forms: [hl], [bc], [de], [hl+], [hl-], [c], [n16].
-    // Grammar accepts any register — semantic validation deferred to LSP.
-    _memory_content: $ => choice(
+    // SM83 legal: [hl], [bc], [de], [hl+], [hl-], [c] (high mem), [n16].
+    // Uses generic register token — semantic validation deferred to LSP
+    // (dedicated tokens cause lexer conflicts with the register token).
+    memory_operand: $ => seq('[', choice(
       seq($.register, '+'),
       seq($.register, '-'),
       $.register,
       $.sp_register,
       $.expression,
-    ),
-
-    memory_operand: $ => seq('[', $._memory_content, ']'),
+    ), ']'),
 
     // ─── Directives ───────────────────────────────────────────
 
     directive: $ => choice(
-      $._core_directive,
-      $._block_directive,
-      $._stack_directive,
-      $._rs_directive,
+      $._core_directive, $._block_directive, $._stack_directive, $._rs_directive,
     ),
 
     _core_directive: $ => choice(
-      $.section_directive,
-      $.load_directive,
-      $.data_directive,
-      $.constant_directive,
-      $.include_directive,
-      $.incbin_directive,
-      $.export_directive,
-      $.purge_directive,
-      $.charmap_directive,
-      $.newcharmap_directive,
-      $.setcharmap_directive,
-      $.assert_directive,
-      $.print_directive,
-      $.warn_directive,
-      $.fail_directive,
+      $.section_directive, $.load_directive, $.data_directive, $.constant_directive,
+      $.include_directive, $.incbin_directive, $.export_directive, $.purge_directive,
+      $.charmap_directive, $.newcharmap_directive, $.setcharmap_directive,
+      $.assert_directive, $.print_directive, $.warn_directive, $.fail_directive,
       $.opt_directive,
     ),
 
     _block_directive: $ => choice(
-      $.macro_start,
-      $.endm_directive,
-      $.if_directive,
-      $.elif_directive,
-      $.else_directive,
-      $.endc_directive,
-      $.rept_directive,
-      $.for_directive,
-      $.endr_directive,
-      $.break_directive,
-      $.shift_directive,
-      $.endsection_directive,
-      $.union_directive,
-      $.nextu_directive,
-      $.endu_directive,
-      $.endl_directive,
+      $.macro_start, $.endm_directive,
+      $.if_directive, $.elif_directive, $.else_directive, $.endc_directive,
+      $.rept_directive, $.for_directive, $.endr_directive, $.break_directive,
+      $.shift_directive, $.endsection_directive,
+      $.union_directive, $.nextu_directive, $.endu_directive, $.endl_directive,
     ),
 
     _stack_directive: $ => choice(
-      $.pushs_directive,
-      $.pops_directive,
-      $.pusho_directive,
-      $.popo_directive,
-      $.pushc_directive,
-      $.popc_directive,
+      $.pushs_directive, $.pops_directive,
+      $.pusho_directive, $.popo_directive,
+      $.pushc_directive, $.popc_directive,
     ),
 
     _rs_directive: $ => choice(
-      $.rsreset_directive,
-      $.rsset_directive,
-      $.rb_directive,
-      $.rw_directive,
+      $.rsreset_directive, $.rsset_directive, $.rb_directive, $.rw_directive,
     ),
 
     // ─── Section / Load (shared body) ─────────────────────────
@@ -211,27 +168,35 @@ module.exports = grammar({
     _def_name: $ => choice($.identifier, $.interpolation, $.macro_label),
 
     _assignment_op: $ => choice(
-      '=', '+=', '-=', '*=', '/=', '%=', '|=', '&=', '^=', '<<=', '>>=',
-      ci_kw('SET'),
+      '=', '+=', '-=', '*=', '/=', '%=', '|=', '&=', '^=', '<<=', '>>=' , ci_kw('SET'),
     ),
 
     _reserve_op: $ => choice(ci_kw('RB'), ci_kw('RW'), ci_kw('RL')),
 
+    _def_body: $ => choice(
+      seq(ci_kw('EQU'), $.expression),
+      seq(ci_kw('EQUS'), $.expression),
+      seq($._assignment_op, $.expression),
+      seq($._reserve_op, optional($.expression)),
+    ),
+
+    _redef_body: $ => choice(
+      seq(ci_kw('EQU'), $.expression),
+      seq(ci_kw('EQUS'), $.expression),
+      seq($._assignment_op, $.expression),
+    ),
+
+    _legacy_def_body: $ => choice(
+      seq(ci_kw('EQU'), $.expression),
+      seq(ci_kw('EQUS'), $.expression),
+      seq(choice('=', ci_kw('SET')), $.expression),
+      seq($._reserve_op, optional($.expression)),
+    ),
+
     constant_directive: $ => choice(
-      seq(ci_kw('DEF'), field('name', $._def_name), ci_kw('EQU'), $.expression),
-      seq(ci_kw('DEF'), field('name', $._def_name), ci_kw('EQUS'), $.expression),
-      seq(ci_kw('DEF'), field('name', $._def_name), $._assignment_op, $.expression),
-      seq(ci_kw('DEF'), field('name', $._def_name), $._reserve_op, optional($.expression)),
-
-      seq(ci_kw('REDEF'), field('name', $._def_name), ci_kw('EQU'), $.expression),
-      seq(ci_kw('REDEF'), field('name', $._def_name), ci_kw('EQUS'), $.expression),
-      seq(ci_kw('REDEF'), field('name', $._def_name), $._assignment_op, $.expression),
-
-      // Legacy (no DEF/REDEF prefix)
-      seq(field('name', $.identifier), ci_kw('EQU'), $.expression),
-      seq(field('name', $.identifier), ci_kw('EQUS'), $.expression),
-      seq(field('name', $.identifier), choice('=', ci_kw('SET')), $.expression),
-      seq(field('name', $.identifier), $._reserve_op, optional($.expression)),
+      seq(ci_kw('DEF'), field('name', $._def_name), $._def_body),
+      seq(ci_kw('REDEF'), field('name', $._def_name), $._redef_body),
+      seq(field('name', $.identifier), $._legacy_def_body),
     ),
 
     // ─── Include / Incbin ─────────────────────────────────────
@@ -246,28 +211,18 @@ module.exports = grammar({
     // ─── Export / Purge ───────────────────────────────────────
 
     _symbol_name: $ => choice($.identifier, $.macro_label, $.macro_arg),
+    _symbol_list: $ => seq($._symbol_name, repeat(seq(',', $._symbol_name))),
 
-    export_directive: $ => seq(
-      choice(ci_kw('EXPORT'), ci_kw('GLOBAL')),
-      $._symbol_name, repeat(seq(',', $._symbol_name)),
-    ),
-
-    purge_directive: $ => seq(
-      ci_kw('PURGE'), $._symbol_name, repeat(seq(',', $._symbol_name)),
-    ),
+    export_directive: $ => seq(choice(ci_kw('EXPORT'), ci_kw('GLOBAL')), $._symbol_list),
+    purge_directive: $ => seq(ci_kw('PURGE'), $._symbol_list),
 
     // ─── Macro ────────────────────────────────────────────────
 
-    macro_start: $ => seq(
-      choice(token(prec(1, seq(ci('MACRO'), '?'))), ci_kw('MACRO')),
-      field('name', $.identifier),
-    ),
-
+    macro_start: $ => seq(ci_kw_q('MACRO'), field('name', $.identifier)),
     endm_directive: _ => ci_kw('ENDM'),
 
-    // Lowest precedence fallback: any identifier that didn't match a directive
-    // or instruction is treated as a macro invocation. Inherently broad but
-    // matches RGBDS behavior where any identifier can be a user-defined macro.
+    // Lowest precedence fallback. Inherently broad but matches RGBDS behavior
+    // where any identifier can be a user-defined macro.
     macro_invocation: $ => prec(-2, seq(
       field('name', $.identifier),
       optional($.expression_list),
@@ -286,14 +241,10 @@ module.exports = grammar({
 
     // ─── Loops ────────────────────────────────────────────────
 
-    rept_directive: $ => seq(
-      choice(token(prec(1, seq(ci('REPT'), '?'))), ci_kw('REPT')),
-      $.expression,
-    ),
+    rept_directive: $ => seq(ci_kw_q('REPT'), $.expression),
 
     for_directive: $ => seq(
-      choice(token(prec(1, seq(ci('FOR'), '?'))), ci_kw('FOR')),
-      field('variable', $.identifier), ',',
+      ci_kw_q('FOR'), field('variable', $.identifier), ',',
       $.expression, repeat(seq(',', $.expression)),
     ),
 
@@ -303,7 +254,6 @@ module.exports = grammar({
 
     // ─── RS counter ───────────────────────────────────────────
     // Note: standalone rl NOT included — conflicts with SM83 'rl' instruction.
-    // Use 'DEF name RL' form instead. rb/rw are safe (no instruction conflict).
 
     rsreset_directive: _ => ci_kw('RSRESET'),
     rsset_directive: $ => seq(ci_kw('RSSET'), $.expression),
@@ -313,11 +263,7 @@ module.exports = grammar({
     // ─── Charmap ──────────────────────────────────────────────
 
     charmap_directive: $ => seq(ci_kw('CHARMAP'), $.expression, ',', $.expression_list),
-
-    newcharmap_directive: $ => seq(
-      ci_kw('NEWCHARMAP'), $.identifier, optional(seq(',', $.identifier)),
-    ),
-
+    newcharmap_directive: $ => seq(ci_kw('NEWCHARMAP'), $.identifier, optional(seq(',', $.identifier))),
     setcharmap_directive: $ => seq(ci_kw('SETCHARMAP'), $.identifier),
     pushc_directive: $ => seq(ci_kw('PUSHC'), optional($.identifier)),
     popc_directive: _ => ci_kw('POPC'),
@@ -329,10 +275,7 @@ module.exports = grammar({
       $.expression, optional(seq(',', $.expression)),
     ),
 
-    print_directive: $ => seq(
-      choice(ci_kw('PRINT'), ci_kw('PRINTLN')),
-      optional($.expression_list),
-    ),
+    print_directive: $ => seq(choice(ci_kw('PRINT'), ci_kw('PRINTLN')), optional($.expression_list)),
 
     warn_directive: $ => seq(ci_kw('WARN'), $.string),
     fail_directive: $ => seq(ci_kw('FAIL'), $.string),
@@ -354,53 +297,29 @@ module.exports = grammar({
     expression_list: $ => seq($.expression, repeat(seq(',', $.expression)), optional(',')),
 
     expression: $ => choice(
-      $.binary_expression,
-      $.unary_expression,
-      $.parenthesized_expression,
-      $.function_call,
-      $.interpolation,
-      $.equs_expansion,
-      $.number,
-      $.string,
-      $.char_literal,
-      $.gfx_literal,
-      $.symbol_reference,
-      $.macro_arg,
+      $.binary_expression, $.unary_expression, $.parenthesized_expression,
+      $.function_call, $.interpolation, $.equs_expansion,
+      $.number, $.string, $.char_literal, $.gfx_literal,
+      $.symbol_reference, $.macro_arg,
     ),
 
     // BEST-EFFORT HEURISTIC for EQUS text expansion.
-    //
-    // RGBDS EQUS macros expand as raw text before parsing, creating token
-    // sequences the grammar cannot predict. This rule recognizes common
-    // unexpanded patterns as parse-recovery. The LSP should not rely on
-    // the structure of equs_expansion nodes.
+    // EQUS macros expand as raw text before parsing, creating token sequences
+    // the grammar cannot predict. The LSP should not rely on the structure of
+    // equs_expansion nodes — they are parse-recovery, not semantic.
+    _equs_atom: $ => choice($.number, $.identifier, $.macro_arg, $.char_literal, $.parenthesized_expression),
+
     equs_expansion: $ => prec.left(-1, choice(
       // literal + EQUS identifier: "2 percent", "\2 tiles", "(7*7) tiles"
-      seq(
-        choice($.number, $.macro_arg, $.parenthesized_expression, $.macro_label),
-        $.identifier,
-        repeat(choice($.number, $.identifier, $.macro_arg, $.char_literal, $.parenthesized_expression)),
-      ),
+      seq(choice($.number, $.macro_arg, $.parenthesized_expression, $.macro_label), $.identifier, repeat($._equs_atom)),
       // EQUS identifier + literal: "time_group 10", "tile '0'", "palred 31"
-      seq(
-        $.identifier,
-        choice($.number, $.char_literal),
-        repeat(choice($.number, $.identifier, $.macro_arg, $.char_literal)),
-      ),
-      // identifier chain: "vTiles2 tile $31", "palred 31 + palgreen 20"
-      // Broadest form — may over-accept in rare cases.
-      seq(
-        $.identifier,
-        $.identifier,
-        repeat1(choice($.number, $.identifier, $.macro_arg, $.char_literal, $.parenthesized_expression)),
-      ),
+      seq($.identifier, choice($.number, $.char_literal), repeat(choice($.number, $.identifier, $.macro_arg, $.char_literal))),
+      // identifier chain: "vTiles2 tile $31" — broadest form, may over-accept
+      seq($.identifier, $.identifier, repeat1($._equs_atom)),
     )),
 
-    // Limitation: single-level regex, won't handle deeply nested {d:{expr}}.
-    interpolation: _ => choice(
-      /\{[^}\r\n]*\}/,
-      /\{\{[^}\r\n]*\}\}/,
-    ),
+    // Single-level regex. Deeply nested {d:{expr}} requires external scanner.
+    interpolation: _ => choice(/\{[^}\r\n]*\}/, /\{\{[^}\r\n]*\}\}/),
 
     binary_expression: $ => {
       /** @type {[string, number][]} */
@@ -424,27 +343,20 @@ module.exports = grammar({
     },
 
     unary_expression: $ => prec(11, choice(
-      seq('-', $.expression),
-      seq('+', $.expression),
-      seq('~', $.expression),
-      seq('!', $.expression),
+      seq('-', $.expression), seq('+', $.expression),
+      seq('~', $.expression), seq('!', $.expression),
     )),
 
     parenthesized_expression: $ => seq('(', $.expression, ')'),
 
-    function_call: $ => seq(
-      field('function', $.identifier), '(', optional($.expression_list), ')',
+    function_call: $ => seq(field('function', $.identifier), '(', optional($.expression_list), ')'),
+
+    _named_ref: $ => choice(
+      $.identifier, $.scoped_identifier, $.local_identifier,
+      $.macro_label, $.equs_string_ref,
     ),
 
-    symbol_reference: $ => choice(
-      $.identifier,
-      $.scoped_identifier,
-      $.local_identifier,
-      $.macro_label,
-      $.equs_string_ref,
-      '@',
-      /:[+-]+/,
-    ),
+    symbol_reference: $ => choice($._named_ref, '@', /:[+-]+/),
 
     equs_string_ref: _ => choice(
       /#[a-zA-Z_][a-zA-Z0-9_]*((\{[^}\r\n]*\}|\\[1-9@])[a-zA-Z0-9_]*)*/,
@@ -461,24 +373,13 @@ module.exports = grammar({
     local_identifier: _ => /\.[a-zA-Z_][a-zA-Z0-9_]*((\{[^}\r\n]*\}|\\[1-9@])[a-zA-Z0-9_]*)*(\\@)?/,
 
     number: _ => choice(
-      /\$[0-9a-fA-F_]+/,
-      /0[xX][0-9a-fA-F_]+/,
-      /#[0-9a-fA-F_]+/,
-      /%[01_]+/,
-      /%[.a-zA-Z0-9_]+/,
-      /0[bB][01_]+/,
-      /&[0-7_]+/,
-      /0[oO][0-7_]+/,
-      /[0-9]+\.[0-9]+[qQ][0-9]+/,
-      /[0-9]+\.[0-9]+/,
-      /[0-9][0-9_]*/,
+      /\$[0-9a-fA-F_]+/, /0[xX][0-9a-fA-F_]+/, /#[0-9a-fA-F_]+/,
+      /%[01_]+/, /%[.a-zA-Z0-9_]+/, /0[bB][01_]+/,
+      /&[0-7_]+/, /0[oO][0-7_]+/,
+      /[0-9]+\.[0-9]+[qQ][0-9]+/, /[0-9]+\.[0-9]+/, /[0-9][0-9_]*/,
     ),
 
-    char_literal: _ => choice(
-      /'<[^>\r\n]*>'/,
-      /'\\.[^']*'/,
-      /'[^'\\\r\n]+'/,
-    ),
+    char_literal: _ => choice(/'<[^>\r\n]*>'/, /'\\.[^']*'/, /'[^'\\\r\n]+'/),
 
     gfx_literal: _ => /`[^\s,;\r\n]+/,
 
@@ -489,22 +390,19 @@ module.exports = grammar({
   },
 });
 
-/**
- * @param {string} keyword
- * @returns {RegExp}
- */
-function ci(keyword) {
-  return new RegExp(
-    keyword.split('').map(c =>
-      /[a-zA-Z]/.test(c) ? `[${c.toLowerCase()}${c.toUpperCase()}]` : c
-    ).join('')
-  );
+/** @param {string} kw @returns {RegExp} */
+function ci(kw) {
+  return new RegExp(kw.split('').map(c =>
+    /[a-zA-Z]/.test(c) ? `[${c.toLowerCase()}${c.toUpperCase()}]` : c
+  ).join(''));
 }
 
-/**
- * @param {string} keyword
- * @returns {RuleOrLiteral}
- */
-function ci_kw(keyword) {
-  return token(prec(1, ci(keyword)));
+/** @param {string} kw @returns {RuleOrLiteral} */
+function ci_kw(kw) {
+  return token(prec(1, ci(kw)));
+}
+
+/** keyword with optional ? suffix (MACRO?/REPT?/FOR?) @param {string} kw @returns {RuleOrLiteral} */
+function ci_kw_q(kw) {
+  return choice(token(prec(1, seq(ci(kw), '?'))), ci_kw(kw));
 }
