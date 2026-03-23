@@ -45,17 +45,9 @@ npm run build
 
 ### Claude Code
 
-Add the marketplace and install by name:
-
 ```bash
 claude plugin marketplace add minorum/rgbds-lsp
 claude plugin install rgbds-lsp
-```
-
-Or install directly from the repository:
-
-```bash
-claude plugin install https://github.com/minorum/rgbds-lsp
 ```
 
 The plugin builds the server automatically on first session and launches it for `.asm` and `.inc` files.
