@@ -1,0 +1,138 @@
+================================================================================
+Exponentiation is right-associative
+================================================================================
+
+DEF x EQU 2 ** 3 ** 2
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (binary_expression
+              (expression
+                (number))
+              (expression
+                (binary_expression
+                  (expression
+                    (number))
+                  (expression
+                    (number)))))))))))
+
+================================================================================
+Unsigned right shift
+================================================================================
+
+DEF x EQU $FF >>> 4
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (constant_directive
+          (identifier)
+          (expression
+            (binary_expression
+              (expression
+                (number))
+              (expression
+                (number)))))))))
+
+================================================================================
+ASSERT with severity
+================================================================================
+
+ASSERT WARN, x == 1, "bad value"
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (assert_directive
+          (expression
+            (binary_expression
+              (expression
+                (symbol_reference
+                  (identifier)))
+              (expression
+                (number))))
+          (expression
+            (string)))))))
+
+================================================================================
+STATIC_ASSERT with FATAL
+================================================================================
+
+STATIC_ASSERT FATAL, BANK(@) == 0
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (assert_directive
+          (expression
+            (binary_expression
+              (expression
+                (function_call
+                  (identifier)
+                  (expression_list
+                    (expression
+                      (symbol_reference)))))
+              (expression
+                (number)))))))))
+
+================================================================================
+WARN with string expression
+================================================================================
+
+    WARN STRFMT("val=%d", x)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (directive
+        (warn_directive
+          (expression
+            (function_call
+              (identifier)
+              (expression_list
+                (expression
+                  (string))
+                (expression
+                  (symbol_reference
+                    (identifier)))))))))))
+
+================================================================================
+RL instruction still works
+================================================================================
+
+    rl c
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (line)
+  (line
+    (statement
+      (instruction
+        (mnemonic)
+        (operand_list
+          (operand
+            (condition)))))))

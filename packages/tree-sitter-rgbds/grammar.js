@@ -253,7 +253,9 @@ module.exports = grammar({
     endl_directive: _ => ci_kw('ENDL'),
 
     // ─── RS counter ───────────────────────────────────────────
-    // Note: standalone rl NOT included — conflicts with SM83 'rl' instruction.
+    // Standalone rl cannot be included: 'rl' is both an SM83 mnemonic and an RS
+    // directive, and the mnemonic token always wins at the lexer level. The named
+    // form 'DEF name RL expr' works via constant_directive's _reserve_op.
 
     rsreset_directive: _ => ci_kw('RSRESET'),
     rsset_directive: $ => seq(ci_kw('RSSET'), $.expression),
@@ -270,15 +272,18 @@ module.exports = grammar({
 
     // ─── Assertions / Output ──────────────────────────────────
 
+    // ASSERT [WARN|FAIL|FATAL,] condition [, message]
     assert_directive: $ => seq(
       choice(ci_kw('ASSERT'), ci_kw('STATIC_ASSERT')),
-      $.expression, optional(seq(',', $.expression)),
+      optional(seq(choice(ci_kw('WARN'), ci_kw('FAIL'), ci_kw('FATAL')), ',')),
+      $.expression,
+      optional(seq(',', $.expression)),
     ),
 
     print_directive: $ => seq(choice(ci_kw('PRINT'), ci_kw('PRINTLN')), optional($.expression_list)),
 
-    warn_directive: $ => seq(ci_kw('WARN'), $.string),
-    fail_directive: $ => seq(ci_kw('FAIL'), $.string),
+    warn_directive: $ => seq(ci_kw('WARN'), $.expression),
+    fail_directive: $ => seq(ci_kw('FAIL'), $.expression),
 
     // ─── Options / Stacks ─────────────────────────────────────
 
@@ -322,8 +327,9 @@ module.exports = grammar({
     interpolation: _ => choice(/\{[^}\r\n]*\}/, /\{\{[^}\r\n]*\}\}/),
 
     binary_expression: $ => {
+      // Left-associative operators (standard)
       /** @type {[string, number][]} */
-      const ops = [
+      const leftOps = [
         ['||', 1],
         ['&&', 2],
         ['===', 3], ['!==', 3], ['==', 3], ['!=', 3], ['<', 3], ['>', 3], ['<=', 3], ['>=', 3],
@@ -331,13 +337,20 @@ module.exports = grammar({
         ['|', 5],
         ['^', 6],
         ['&', 7],
-        ['<<', 8], ['>>', 8],
+        ['<<', 8], ['>>', 8], ['>>>', 8],
         ['*', 9], ['/', 9], ['%', 9],
+      ];
+      // Right-associative operators
+      /** @type {[string, number][]} */
+      const rightOps = [
         ['**', 10],
       ];
       return choice(
-        ...ops.map(([op, p]) =>
+        ...leftOps.map(([op, p]) =>
           prec.left(p, seq(field('left', $.expression), op, field('right', $.expression)))
+        ),
+        ...rightOps.map(([op, p]) =>
+          prec.right(p, seq(field('left', $.expression), op, field('right', $.expression)))
         ),
       );
     },
