@@ -13,7 +13,7 @@ jobs:
         include:
           - os: ubuntu-latest
           - os: ubuntu-24.04-arm
-          - os: macos-13
+          - os: macos-latest
           - os: macos-14
           - os: windows-latest
     runs-on: ${{ matrix.os }}
@@ -26,7 +26,7 @@ jobs:
 
       - name: Install dependencies
         working-directory: packages/tree-sitter-rgbds
-        run: npm install
+        run: npm install --ignore-scripts
 
       - name: Build prebuilds
         working-directory: packages/tree-sitter-rgbds

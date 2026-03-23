@@ -23,8 +23,7 @@ package-lock.json
 _temp_repos/
 prebuilds/
 
-# tree-sitter generated (commit parser.c so plugin installs work without tree-sitter-cli)
-packages/tree-sitter-rgbds/src/tree_sitter/
+# tree-sitter generated (commit parser.c + headers so builds work without tree-sitter-cli)
 packages/tree-sitter-rgbds/src/grammar.json
 packages/tree-sitter-rgbds/src/node-types.json
 packages/tree-sitter-rgbds/parser.*
