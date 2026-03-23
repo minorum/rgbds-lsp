@@ -4,7 +4,7 @@ import { pathToUri, collectRgbdsFiles } from './utils';
 import * as fs from 'fs';
 
 // Load tree-sitter-rgbds grammar
-const rgbdsLanguage = require('tree-sitter-rgbds');
+const rgbdsLanguage = require('@minorum/tree-sitter-rgbds');
 
 export class Indexer {
     public definitions: Map<string, SymbolDef> = new Map();

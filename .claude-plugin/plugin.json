@@ -14,7 +14,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "npm install --prefix \"${CLAUDE_PLUGIN_DATA}\" rgbds-language-server@0.1.4 2>/dev/null || true"
+            "command": "npm install --prefix \"${CLAUDE_PLUGIN_DATA}\" @minorum/rgbds-language-server@0.1.4 2>/dev/null || true"
           }
         ]
       }

@@ -17,10 +17,10 @@ try {
 }
 
 try {
-    require('tree-sitter-rgbds');
-    console.log('✓ tree-sitter-rgbds loaded');
+    require('@minorum/tree-sitter-rgbds');
+    console.log('✓ @minorum/tree-sitter-rgbds loaded');
 } catch (e: any) {
-    console.error('✗ tree-sitter-rgbds failed:', e.message);
+    console.error('✗ @minorum/tree-sitter-rgbds failed:', e.message);
     console.error('  (native module may need rebuilding: npm rebuild)');
     process.exit(1);
 }
