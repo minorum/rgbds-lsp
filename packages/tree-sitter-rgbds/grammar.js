@@ -206,7 +206,6 @@ module.exports = grammar({
       $.rsset_directive,
       $.rb_directive,
       $.rw_directive,
-      $.rl_directive,
     ),
 
     // ─── Section ──────────────────────────────────────────────
@@ -352,12 +351,14 @@ module.exports = grammar({
     endl_directive: _ => ci_kw('ENDL'),
 
     // ─── RS counter directives ─────────────────────────────────
+    // Note: standalone rl is NOT included here because it conflicts with the
+    // SM83 'rl' (rotate left) instruction. Use 'DEF name RL' form instead.
+    // rb and rw don't conflict with any instructions so they're safe.
 
     rsreset_directive: _ => ci_kw('RSRESET'),
     rsset_directive: $ => seq(ci_kw('RSSET'), $.expression),
     rb_directive: $ => seq(ci_kw('RB'), optional($.expression)),
     rw_directive: $ => seq(ci_kw('RW'), optional($.expression)),
-    rl_directive: $ => seq(ci_kw('RL'), optional($.expression)),
 
     // ─── Charmap ──────────────────────────────────────────────
 
