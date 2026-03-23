@@ -20,6 +20,7 @@ Language server and VS Code extension for [RGBDS](https://rgbds.gbdev.io/) Game 
 | [`tree-sitter-rgbds`](packages/tree-sitter-rgbds/) | Tree-sitter grammar for RGBDS assembly |
 | [`rgbds-language-server`](packages/server/) | LSP server powered by tree-sitter |
 | [`rgbds-lsp`](packages/vscode/) | VS Code extension |
+| [`.claude-plugin`](.claude-plugin/) | Claude Code plugin |
 
 ## Architecture
 
@@ -44,19 +45,20 @@ npm run build
 
 ### Claude Code
 
-Configure the language server in your Claude Code settings:
+Add the marketplace and install by name:
 
-```json
-{
-  "lsp": {
-    "rgbds": {
-      "command": "node",
-      "args": ["path/to/packages/server/dist/index.js", "--stdio"],
-      "languages": ["rgbds"]
-    }
-  }
-}
+```bash
+claude plugin marketplace add minorum/rgbds-lsp
+claude plugin install rgbds-lsp
 ```
+
+Or install directly from the repository:
+
+```bash
+claude plugin install https://github.com/minorum/rgbds-lsp
+```
+
+The plugin builds the server automatically on first session and launches it for `.asm` and `.inc` files.
 
 ### Standalone
 

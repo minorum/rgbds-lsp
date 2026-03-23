@@ -1,0 +1,13 @@
+{
+  "name": "rgbds-lsp",
+  "owner": {
+    "name": "minorum"
+  },
+  "plugins": [
+    {
+      "name": "rgbds-lsp",
+      "source": "./",
+      "description": "RGBDS Game Boy assembly language server — go-to-definition, find references, completion, hover, diagnostics, rename, document outline"
+    }
+  ]
+}
