@@ -35,6 +35,7 @@ import {
     InlayHint,
     InlayHintKind,
     InlayHintParams,
+    SignatureHelpParams,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -49,6 +50,7 @@ import { getFoldingRanges } from './folding';
 import { getCodeActions } from './code-actions';
 import { matchInstructionForm } from './instruction-matcher';
 import { getAssembledBytesData, AssembledBytesSettings, DEFAULT_ASSEMBLED_BYTES_SETTINGS, validateCommentBytes, formatBytesFlat } from './assembled-bytes';
+import { getSignatureHelp } from './signature-help';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -91,6 +93,9 @@ connection.onInitialize((params: InitializeParams) => {
             hoverProvider: true,
             documentSymbolProvider: true,
             completionProvider: { resolveProvider: false, triggerCharacters: ['"', '/'] },
+            signatureHelpProvider: {
+                triggerCharacters: [' ', ','],
+            },
             renameProvider: { prepareProvider: true },
             workspaceSymbolProvider: true,
             documentLinkProvider: {},
@@ -736,6 +741,15 @@ connection.onCompletion((params: TextDocumentPositionParams): CompletionItem[] =
         : '';
 
     return getCompletions(params, rgbdsIndexer, lineText);
+});
+
+// ─── Signature Help ───────────────────────────────────────────
+
+connection.onSignatureHelp((params: SignatureHelpParams) => {
+    const doc = documents.get(params.textDocument.uri);
+    if (!doc) return null;
+    return getSignatureHelp(doc, params.position, rgbdsIndexer.definitions,
+        (uri) => rgbdsIndexer.getOrParseTree(uri));
 });
 
 // ─── Rename ───────────────────────────────────────────────────
