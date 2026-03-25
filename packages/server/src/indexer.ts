@@ -813,6 +813,53 @@ export class Indexer {
             fileRefs.add(name);
         }
     }
+
+    /** Remove all indexed data for files under the given folder path. */
+    public removeFolder(folderPath: string): void {
+        const folderUri = pathToUri(folderPath);
+        // Remove all definitions from files in this folder
+        for (const [uri, defNames] of Array.from(this.fileDefinitions)) {
+            if (uri.startsWith(folderUri)) {
+                for (const name of defNames) {
+                    this.definitions.delete(name);
+                }
+                this.fileDefinitions.delete(uri);
+            }
+        }
+        // Remove all references from files in this folder
+        for (const [uri, refNames] of Array.from(this.fileReferences)) {
+            if (uri.startsWith(folderUri)) {
+                for (const name of refNames) {
+                    const refs = this.references.get(name);
+                    if (refs) {
+                        const filtered = refs.filter(r => !r.file.startsWith(folderUri));
+                        if (filtered.length === 0) this.references.delete(name);
+                        else this.references.set(name, filtered);
+                    }
+                }
+                this.fileReferences.delete(uri);
+            }
+        }
+        // Clean up trees and file contents
+        for (const uri of Array.from(this.trees.keys())) {
+            if (uri.startsWith(folderUri)) {
+                this.trees.delete(uri);
+                this.fileContents.delete(uri);
+            }
+        }
+        // Clean up indexed file URIs
+        for (const uri of Array.from(this.indexedFileUris)) {
+            if (uri.startsWith(folderUri)) {
+                this.indexedFileUris.delete(uri);
+            }
+        }
+        // Clean up includers
+        for (const [target, refs] of Array.from(this.includers)) {
+            const filtered = refs.filter(r => !r.from.startsWith(folderUri));
+            if (filtered.length === 0) this.includers.delete(target);
+            else this.includers.set(target, filtered);
+        }
+    }
 }
 
 export const rgbdsIndexer = new Indexer();

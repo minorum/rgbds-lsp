@@ -32,6 +32,9 @@ import {
     CodeActionParams,
     FileChangeType,
     ResponseError,
+    InlayHint,
+    InlayHintKind,
+    InlayHintParams,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -97,6 +100,7 @@ connection.onInitialize((params: InitializeParams) => {
                 full: true,
             },
             codeActionProvider: true,
+            inlayHintProvider: true,
         },
     };
 
@@ -649,6 +653,70 @@ connection.onRequest('rgbds/assembledBytes', (params: { uri: string; startLine: 
         },
     );
     return { lines: entries };
+});
+
+// ─── Inlay Hints ─────────────────────────────────────────────
+
+connection.languages.inlayHint.on((params: InlayHintParams): InlayHint[] => {
+    if (!assembledBytesSettings.enabled) return [];
+    const doc = documents.get(params.textDocument.uri);
+    if (!doc) return [];
+
+    const tree = rgbdsIndexer.getOrParseTree(doc.uri);
+    if (!tree) return [];
+
+    const entries = getAssembledBytesData(
+        tree,
+        doc.uri,
+        params.range.start.line,
+        params.range.end.line,
+        assembledBytesSettings,
+        rgbdsIndexer.definitions,
+        (u) => rgbdsIndexer.getOrParseTree(u),
+        (str, line) => {
+            const charmap = rgbdsIndexer.getActiveCharmap(doc.uri, line);
+            return charmap ? rgbdsIndexer.encodeStringBytes(charmap, str) : null;
+        },
+    );
+
+    return entries
+        .map(entry => ({
+            position: { line: entry.line, character: Number.MAX_SAFE_INTEGER },
+            label: '  ' + entry.short,
+            kind: InlayHintKind.Parameter,
+            paddingLeft: true,
+            tooltip: entry.full !== entry.short ? entry.full : undefined,
+        }))
+        .filter(h => (h.label as string).trim().length > 0);
+});
+
+// ─── Workspace Folder Changes ─────────────────────────────────
+
+connection.workspace.onDidChangeWorkspaceFolders(event => {
+    // Index newly added folders
+    for (const added of event.event.added) {
+        const folderPath = uriToPath(added.uri);
+        rgbdsIndexer.indexProjectAsync(folderPath)
+            .then(result => {
+                connection.console.info(`[Server] Indexed added folder: ${result.indexed} files`);
+                // Refresh diagnostics for open documents
+                for (const doc of documents.all()) {
+                    const diagnostics = computeDiagnostics(doc);
+                    connection.sendDiagnostics({ uri: doc.uri, diagnostics });
+                }
+            })
+            .catch(err => connection.console.error(`[Server] Failed to index folder: ${err}`));
+    }
+
+    // Remove symbols from removed folders
+    for (const removed of event.event.removed) {
+        rgbdsIndexer.removeFolder(uriToPath(removed.uri));
+        // Refresh diagnostics
+        for (const doc of documents.all()) {
+            const diagnostics = computeDiagnostics(doc);
+            connection.sendDiagnostics({ uri: doc.uri, diagnostics });
+        }
+    }
 });
 
 // ─── Completion ───────────────────────────────────────────────
