@@ -86,6 +86,75 @@ export function stripQuotes(text: string): string {
     return text;
 }
 
+/** Parse a simple RGBDS number literal ($hex, %bin, 0xhex, decimal). */
+export function tryParseNumber(text: string): number | null {
+    const trimmed = text.trim();
+    if (/^\d+$/.test(trimmed)) return parseInt(trimmed, 10);
+    if (/^\$[0-9a-fA-F]+$/.test(trimmed)) return parseInt(trimmed.slice(1), 16);
+    if (/^0x[0-9a-fA-F]+$/i.test(trimmed)) return parseInt(trimmed, 16);
+    if (/^%[01]+$/.test(trimmed)) return parseInt(trimmed.slice(1), 2);
+    return null;
+}
+
+/** Evaluate a simple RGBDS expression with arithmetic, bitwise, and comparison operators + _NARG. */
+export function evalExpr(
+    expr: string,
+    args: string[],
+    resolveValue: (text: string) => number | null,
+): number | null {
+    const s = expr.trim();
+    if (s === '_NARG') return args.length;
+
+    // Tokenize: split on multi-char operators first (>=, <=, ==, !=), then single-char
+    const tokens = s.match(/(?:>=|<=|==|!=|[^+\-&|^><=!]+|[+\-&|^><])/g);
+    if (!tokens) return resolveValue(s);
+
+    const values: number[] = [];
+    const ops: string[] = [];
+    let expectValue = true;
+
+    for (const raw of tokens) {
+        const tok = raw.trim();
+        if (!tok) continue;
+        if (expectValue) {
+            if (tok === '_NARG') {
+                values.push(args.length);
+            } else {
+                const v = resolveValue(tok);
+                if (v === null) return null;
+                values.push(v);
+            }
+            expectValue = false;
+        } else {
+            ops.push(tok);
+            expectValue = true;
+        }
+    }
+
+    if (values.length === 0) return null;
+    if (values.length === 1) return values[0];
+
+    let result = values[0];
+    for (let i = 0; i < ops.length; i++) {
+        const v = values[i + 1];
+        switch (ops[i]) {
+            case '+': result = result + v; break;
+            case '-': result = result - v; break;
+            case '&': result = result & v; break;
+            case '|': result = result | v; break;
+            case '^': result = result ^ v; break;
+            case '>': result = (result > v) ? 1 : 0; break;
+            case '<': result = (result < v) ? 1 : 0; break;
+            case '>=': result = (result >= v) ? 1 : 0; break;
+            case '<=': result = (result <= v) ? 1 : 0; break;
+            case '==': result = (result === v) ? 1 : 0; break;
+            case '!=': result = (result !== v) ? 1 : 0; break;
+            default: return null;
+        }
+    }
+    return result;
+}
+
 export function collectRgbdsFiles(rootDir: string): string[] {
     const result: string[] = [];
     const stack = [rootDir];

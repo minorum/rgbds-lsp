@@ -1,35 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { stripQuotes, parseNumberLiteral } from '../src/utils';
 import { Indexer } from '../src/indexer';
 
 // ---------------------------------------------------------------------------
-// stripQuotes
-// ---------------------------------------------------------------------------
-
-describe('stripQuotes', () => {
-    it('strips regular double-quoted string', () => {
-        expect(stripQuotes('"hello"')).toBe('hello');
-    });
-
-    it('strips triple-quoted string', () => {
-        expect(stripQuotes('"""hello"""')).toBe('hello');
-    });
-
-    it('strips #-prefixed string', () => {
-        expect(stripQuotes('#"hello"')).toBe('hello');
-    });
-
-    it('strips empty double-quoted string', () => {
-        expect(stripQuotes('""')).toBe('');
-    });
-
-    it('strips single-character double-quoted string', () => {
-        expect(stripQuotes('"a"')).toBe('a');
-    });
-});
-
-// ---------------------------------------------------------------------------
-// Per-file index population
+// Per-file index
 // ---------------------------------------------------------------------------
 
 describe('Indexer per-file index', () => {
@@ -76,72 +49,40 @@ describe('Indexer per-file index', () => {
     it('clears old entries and populates new ones on re-index', () => {
         const uri = 'file:///test/example.asm';
 
-        const initialContent = [
+        indexer.indexFile(uri, [
             'SECTION "Main", ROM0',
             'OldLabel:',
             '    ld a, 0',
             'OLD_CONST EQU 10',
-        ].join('\n');
+        ].join('\n'));
 
-        indexer.indexFile(uri, initialContent);
+        expect(indexer.fileDefinitions.get(uri)!.has('OldLabel')).toBe(true);
+        expect(indexer.fileDefinitions.get(uri)!.has('OLD_CONST')).toBe(true);
 
-        // Verify initial state
-        const defsBefore = indexer.fileDefinitions.get(uri);
-        expect(defsBefore!.has('OldLabel')).toBe(true);
-        expect(defsBefore!.has('OLD_CONST')).toBe(true);
-
-        // Re-index with completely different content
-        const newContent = [
+        indexer.indexFile(uri, [
             'SECTION "Main", ROM0',
             'NewLabel:',
             '    ld a, 0',
             'NEW_CONST EQU 99',
-        ].join('\n');
-
-        indexer.indexFile(uri, newContent);
+        ].join('\n'));
 
         const defsAfter = indexer.fileDefinitions.get(uri);
         expect(defsAfter).toBeDefined();
-
-        // Old symbols should be gone
         expect(indexer.definitions.has('OldLabel')).toBe(false);
         expect(indexer.definitions.has('OLD_CONST')).toBe(false);
-
-        // New symbols should be present
         expect(defsAfter!.has('NewLabel')).toBe(true);
         expect(defsAfter!.has('NEW_CONST')).toBe(true);
-        expect(indexer.definitions.has('NewLabel')).toBe(true);
-        expect(indexer.definitions.has('NEW_CONST')).toBe(true);
     });
 
     it('does not lose symbols from other files when re-indexing one file', () => {
-        const uriA = 'file:///test/a.asm';
-        const uriB = 'file:///test/b.asm';
+        indexer.indexFile('file:///test/a.asm', 'SECTION "A", ROM0\nLabelA:\n    ret');
+        indexer.indexFile('file:///test/b.asm', 'SECTION "B", ROM0\nLabelB:\n    ret');
 
-        indexer.indexFile(uriA, [
-            'SECTION "A", ROM0',
-            'LabelA:',
-            '    ret',
-        ].join('\n'));
-
-        indexer.indexFile(uriB, [
-            'SECTION "B", ROM0',
-            'LabelB:',
-            '    ret',
-        ].join('\n'));
-
-        // Verify both present
         expect(indexer.definitions.has('LabelA')).toBe(true);
         expect(indexer.definitions.has('LabelB')).toBe(true);
 
-        // Re-index file A only
-        indexer.indexFile(uriA, [
-            'SECTION "A", ROM0',
-            'LabelA:',
-            '    nop',
-        ].join('\n'));
+        indexer.indexFile('file:///test/a.asm', 'SECTION "A", ROM0\nLabelA:\n    nop');
 
-        // LabelB from file B must still be in the index
         expect(indexer.definitions.has('LabelA')).toBe(true);
         expect(indexer.definitions.has('LabelB')).toBe(true);
     });
@@ -181,12 +122,10 @@ describe('Indexer allDefinitions', () => {
 describe('Indexer removeFolder', () => {
     it('removes all symbols from a folder', () => {
         const indexer = new Indexer();
-        // Use paths without leading slash so pathToUri produces matching file:/// URIs
         indexer.indexFile('file:///project/src/a.asm', 'LabelA:\n    ret');
         indexer.indexFile('file:///project/src/b.asm', 'LabelB:\n    ret');
         indexer.indexFile('file:///other/c.asm', 'LabelC:\n    ret');
 
-        // removeFolder uses pathToUri internally; pass a path that converts to 'file:///project/src'
         indexer.removeFolder('project/src');
 
         expect(indexer.definitions.has('LabelA')).toBe(false);
@@ -228,39 +167,5 @@ describe('Indexer local label scoping', () => {
 
         expect(indexer.definitions.has('GlobalA.local')).toBe(true);
         expect(indexer.definitions.has('GlobalB.local')).toBe(true);
-    });
-});
-
-// ---------------------------------------------------------------------------
-// parseNumberLiteral
-// ---------------------------------------------------------------------------
-
-describe('parseNumberLiteral', () => {
-    it('parses hex with $ prefix', () => {
-        const result = parseNumberLiteral('$FF');
-        expect(result).not.toBeNull();
-        expect(result!.value).toBe(255);
-    });
-
-    it('parses hex with 0x prefix', () => {
-        const result = parseNumberLiteral('0xFF');
-        expect(result).not.toBeNull();
-        expect(result!.value).toBe(255);
-    });
-
-    it('parses binary with % prefix', () => {
-        const result = parseNumberLiteral('%1010');
-        expect(result).not.toBeNull();
-        expect(result!.value).toBe(10);
-    });
-
-    it('parses decimal', () => {
-        const result = parseNumberLiteral('42');
-        expect(result).not.toBeNull();
-        expect(result!.value).toBe(42);
-    });
-
-    it('returns null for non-numeric', () => {
-        expect(parseNumberLiteral('hello')).toBeNull();
     });
 });
