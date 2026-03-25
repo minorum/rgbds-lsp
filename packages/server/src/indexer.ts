@@ -38,6 +38,11 @@ export class Indexer {
     public includers: Map<string, IncludeRef[]> = new Map();
     public onLog: ((message: string) => void) | null = null;
 
+    // Maps file URI → set of definition names defined in that file
+    public fileDefinitions: Map<string, Set<string>> = new Map();
+    // Maps file URI → set of reference names that have refs from that file
+    public fileReferences: Map<string, Set<string>> = new Map();
+
     /** Charmap entries: charmap name → (source string → entry with bytes + location) */
     public charmapEntries: Map<string, Map<string, CharmapEntry>> = new Map();
     /** Active charmap state changes per file: file URI → sorted [{line, charmap}] */
@@ -84,6 +89,8 @@ export class Indexer {
         this.definitions.clear();
         this.references.clear();
         this.includers.clear();
+        this.fileDefinitions.clear();
+        this.fileReferences.clear();
         this.trees.clear();
         this.fileContents.clear();
         this.indexedFileUris.clear();
@@ -154,6 +161,8 @@ export class Indexer {
 
     /** Remove symbols for a single file and re-extract them. */
     private reindexFile(uri: string, tree: Parser.Tree): void {
+        this.fileDefinitions.delete(uri);
+        this.fileReferences.delete(uri);
         // Remove old definitions from this file
         for (const [name, def] of Array.from(this.definitions)) {
             if (def.file === uri) this.definitions.delete(name);
@@ -209,6 +218,9 @@ export class Indexer {
                     // Restore from cache — skip parsing
                     for (const [name, def] of entry.definitions) {
                         this.definitions.set(name, def);
+                        let fileDefs = this.fileDefinitions.get(uri);
+                        if (!fileDefs) { fileDefs = new Set(); this.fileDefinitions.set(uri, fileDefs); }
+                        fileDefs.add(name);
                     }
                     for (const [name, refs] of entry.references) {
                         const existing = this.references.get(name);
@@ -217,6 +229,9 @@ export class Indexer {
                         } else {
                             this.references.set(name, [...refs]);
                         }
+                        let fileRefs = this.fileReferences.get(uri);
+                        if (!fileRefs) { fileRefs = new Set(); this.fileReferences.set(uri, fileRefs); }
+                        fileRefs.add(name);
                     }
                     if (entry.includes) {
                         for (const [target, refs] of entry.includes) {
@@ -363,6 +378,8 @@ export class Indexer {
     private rebuildIndex(): void {
         this.definitions.clear();
         this.references.clear();
+        this.fileDefinitions.clear();
+        this.fileReferences.clear();
 
         for (const [uri, tree] of this.trees) {
             this.extractSymbols(uri, tree);
@@ -553,6 +570,9 @@ export class Indexer {
                 isExported: labelNode.children.some(c => c.text === '::'),
                 docComment,
             });
+            let fileDefs = this.fileDefinitions.get(uri);
+            if (!fileDefs) { fileDefs = new Set(); this.fileDefinitions.set(uri, fileDefs); }
+            fileDefs.add(name);
         } else if (labelNode.type === 'local_label') {
             const nameNode = labelNode.childForFieldName('name');
             if (!nameNode) return;
@@ -570,6 +590,9 @@ export class Indexer {
                 parentLabel: currentGlobal || undefined,
                 docComment,
             });
+            let fileDefs = this.fileDefinitions.get(uri);
+            if (!fileDefs) { fileDefs = new Set(); this.fileDefinitions.set(uri, fileDefs); }
+            fileDefs.add(scopedName);
         }
     }
 
@@ -596,6 +619,7 @@ export class Indexer {
                 docComment,
                 value,
             });
+            { let fileDefs = this.fileDefinitions.get(uri); if (!fileDefs) { fileDefs = new Set(); this.fileDefinitions.set(uri, fileDefs); } fileDefs.add(name); }
             // Extract references from the value expression
             for (const child of directive.children) {
                 if (child.type === 'expression') {
@@ -616,6 +640,7 @@ export class Indexer {
                 isExported: false,
                 docComment,
             });
+            { let fileDefs = this.fileDefinitions.get(uri); if (!fileDefs) { fileDefs = new Set(); this.fileDefinitions.set(uri, fileDefs); } fileDefs.add(nameNode.text); }
         } else if (directive.type === 'section_directive') {
             // Extract section name from the string
             const stringNode = directive.children.find(c => c.type === 'string');
@@ -633,6 +658,7 @@ export class Indexer {
                     isExported: false,
                     docComment,
                 });
+                { let fileDefs = this.fileDefinitions.get(uri); if (!fileDefs) { fileDefs = new Set(); this.fileDefinitions.set(uri, fileDefs); } fileDefs.add(name); }
             }
             // Extract references from expressions in section
             this.extractChildReferences(uri, directive, currentGlobal);
@@ -692,6 +718,7 @@ export class Indexer {
                     isExported: false,
                     docComment,
                 });
+                { let fileDefs = this.fileDefinitions.get(uri); if (!fileDefs) { fileDefs = new Set(); this.fileDefinitions.set(uri, fileDefs); } fileDefs.add(nameNode.text); }
             }
         } else if (directive.type === 'export_directive' || directive.type === 'purge_directive') {
             // EXPORT/PURGE reference symbol names
@@ -784,6 +811,9 @@ export class Indexer {
         // Avoid duplicates on same line/col
         if (!refs.some(r => r.file === ref.file && r.line === ref.line && r.col === ref.col)) {
             refs.push(ref);
+            let fileRefs = this.fileReferences.get(ref.file);
+            if (!fileRefs) { fileRefs = new Set(); this.fileReferences.set(ref.file, fileRefs); }
+            fileRefs.add(name);
         }
     }
 }
