@@ -5,6 +5,7 @@ import {
     ServerOptions,
     TransportKind,
     State,
+    MessageType,
 } from 'vscode-languageclient/node';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -330,8 +331,9 @@ export async function activate(context: vscode.ExtensionContext) {
         debug: { module: serverModule, transport: TransportKind.ipc },
     };
 
-    const outputChannel = vscode.window.createOutputChannel('RGBDS LSP');
+    const outputChannel = vscode.window.createOutputChannel('RGBDS LSP', { log: true });
     context.subscriptions.push(outputChannel);
+    const logOutputChannel = outputChannel as vscode.LogOutputChannel;
 
     const clientOptions: LanguageClientOptions = {
         documentSelector: [
@@ -342,7 +344,12 @@ export async function activate(context: vscode.ExtensionContext) {
         middleware: {
             window: {
                 logMessage(type, message, next) {
-                    outputChannel.appendLine(message);
+                    switch (type) {
+                        case MessageType.Error: logOutputChannel.error(message); break;
+                        case MessageType.Warning: logOutputChannel.warn(message); break;
+                        case MessageType.Log: logOutputChannel.debug(message); break;
+                        default: logOutputChannel.info(message); break;
+                    }
                 },
             },
         },
