@@ -33,6 +33,9 @@ import {
     FileChangeType,
     ResponseError,
     SignatureHelpParams,
+    InlayHint,
+    InlayHintKind,
+    InlayHintParams,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -57,6 +60,7 @@ const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 let pendingWorkspaceFolders: string[] = [];
 let assembledBytesSettings: AssembledBytesSettings = { ...DEFAULT_ASSEMBLED_BYTES_SETTINGS };
 let validateCommentBytesEnabled = false;
+let inlayHintSettings = { constantValues: true, macroParameters: false };
 
 connection.onInitialize((params: InitializeParams) => {
     // Collect workspace folders for background indexing after handshake
@@ -77,6 +81,12 @@ connection.onInitialize((params: InitializeParams) => {
     }
     if (initOptions?.validateCommentBytes != null) {
         validateCommentBytesEnabled = initOptions.validateCommentBytes;
+    }
+    if (initOptions?.inlayHints) {
+        inlayHintSettings = {
+            constantValues: initOptions.inlayHints.constantValues ?? true,
+            macroParameters: initOptions.inlayHints.macroParameters ?? false,
+        };
     }
 
     connection.console.info(`[Server] Assembled bytes: enabled=${assembledBytesSettings.enabled}`);
@@ -103,6 +113,7 @@ connection.onInitialize((params: InitializeParams) => {
                 range: true,
             },
             codeActionProvider: true,
+            inlayHintProvider: true,
         },
     };
 
@@ -218,6 +229,12 @@ connection.onDidChangeConfiguration((params) => {
             maxBytesPerLine: settings.assembledBytes?.maxBytesPerLine ?? 8,
         };
         connection.console.info(`[Config] Assembled bytes enabled=${assembledBytesSettings.enabled}`);
+        if (settings.inlayHints) {
+            inlayHintSettings = {
+                constantValues: settings.inlayHints.constantValues ?? true,
+                macroParameters: settings.inlayHints.macroParameters ?? false,
+            };
+        }
     }
 });
 
@@ -641,6 +658,123 @@ connection.onRequest('textDocument/semanticTokens/range', (params: { textDocumen
 connection.onCodeAction((params: CodeActionParams): CodeAction[] => {
     const tree = rgbdsIndexer.getTree(params.textDocument.uri);
     return getCodeActions(params, tree);
+});
+
+// ─── Inlay Hints ──────────────────────────────────────────────
+
+function formatConstantValue(value: string): string | null {
+    const parsed = parseNumberLiteral(value);
+    if (!parsed || parsed.isFixedPoint) return null;
+    const num = parsed.value;
+    if (num >= 0 && num <= 0xFFFF) {
+        return `= $${num.toString(16).toUpperCase().padStart(num > 0xFF ? 4 : 2, '0')}`;
+    }
+    return `= ${num}`;
+}
+
+connection.languages.inlayHint.on((params: InlayHintParams): InlayHint[] => {
+    const hints: InlayHint[] = [];
+    const doc = documents.get(params.textDocument.uri);
+    if (!doc) return hints;
+
+    const treeOrUndef = rgbdsIndexer.getOrParseTree(doc.uri);
+    if (!treeOrUndef) return hints;
+    const tree: Parser.Tree = treeOrUndef;
+
+    const startRow = params.range.start.line;
+    const endRow = params.range.end.line;
+
+    // Walk the AST nodes in the visible range
+    function walkNode(node: Parser.SyntaxNode): void {
+        // Skip nodes entirely outside range
+        if (node.endPosition.row < startRow || node.startPosition.row > endRow) return;
+
+        if (inlayHintSettings.constantValues && node.type === 'symbol_reference') {
+            // Look up the identifier text and check if it resolves to a constant with a numeric value
+            const nameNode = node.firstNamedChild;
+            if (nameNode) {
+                let symbolName = nameNode.text;
+                // Scope local identifiers (.name) to their enclosing global label
+                if (symbolName.startsWith('.') && nameNode.type === 'local_identifier') {
+                    const globalLabel = findEnclosingGlobalLabel(tree, nameNode.startPosition.row);
+                    if (globalLabel) symbolName = globalLabel + symbolName;
+                }
+                const def = rgbdsIndexer.definitions.get(symbolName);
+                if (def && def.type === 'constant' && def.value) {
+                    const hint = formatConstantValue(def.value);
+                    if (hint) {
+                        hints.push({
+                            position: {
+                                line: node.endPosition.row,
+                                character: node.endPosition.column,
+                            },
+                            label: ` ${hint}`,
+                            kind: InlayHintKind.Type,
+                            paddingLeft: false,
+                        });
+                    }
+                }
+            }
+            // Don't descend into symbol_reference children to avoid double-hints
+            return;
+        }
+
+        if (inlayHintSettings.macroParameters && node.type === 'macro_invocation') {
+            const nameNode = node.namedChildren.find(c => c.type === 'identifier');
+            const exprList = node.namedChildren.find(c => c.type === 'expression_list');
+            if (nameNode && exprList) {
+                const macroName = nameNode.text;
+                const macroDef = rgbdsIndexer.definitions.get(macroName);
+                if (macroDef && macroDef.type === 'macro') {
+                    // Determine parameter count by scanning the macro body for \1, \2, etc.
+                    const macroTree = rgbdsIndexer.getOrParseTree(macroDef.file);
+                    let maxParam = 0;
+                    if (macroTree) {
+                        const macroSource = macroTree.rootNode.text;
+                        const macroLines = macroSource.split(/\r?\n/);
+                        for (let i = macroDef.line + 1; i < macroLines.length; i++) {
+                            const line = macroLines[i];
+                            if (/^\s*ENDM\b/i.test(line)) break;
+                            const paramRefs = line.match(/\\([1-9])/g);
+                            if (paramRefs) {
+                                for (const ref of paramRefs) {
+                                    const num = parseInt(ref[1]);
+                                    if (num > maxParam) maxParam = num;
+                                }
+                            }
+                        }
+                    }
+                    if (maxParam === 0) maxParam = 1;
+
+                    // Get argument expressions from expression_list.
+                    // expression_list children are all named (expression is a choice, each variant
+                    // has its own node type — commas are anonymous and excluded from namedChildren).
+                    const args = exprList.namedChildren;
+                    for (let i = 0; i < args.length && i < maxParam; i++) {
+                        const arg = args[i];
+                        hints.push({
+                            position: {
+                                line: arg.startPosition.row,
+                                character: arg.startPosition.column,
+                            },
+                            label: `\\${i + 1}: `,
+                            kind: InlayHintKind.Parameter,
+                            paddingRight: false,
+                        });
+                    }
+                }
+            }
+            // Still descend into macro invocation children (e.g., constant refs in args)
+        }
+
+        for (const child of node.namedChildren) {
+            walkNode(child);
+        }
+    }
+
+    walkNode(tree.rootNode);
+
+    return hints;
 });
 
 // ─── Assembled Bytes ──────────────────────────────────────────

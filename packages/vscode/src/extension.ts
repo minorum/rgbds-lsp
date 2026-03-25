@@ -370,6 +370,10 @@ export async function activate(context: vscode.ExtensionContext) {
                 enabled: config.get<boolean>('assembledBytes.enabled', false),
                 maxBytesPerLine: config.get<number>('assembledBytes.maxBytesPerLine', 8),
             },
+            inlayHints: {
+                constantValues: config.get<boolean>('inlayHints.constantValues', true),
+                macroParameters: config.get<boolean>('inlayHints.macroParameters', false),
+            },
         },
     };
 

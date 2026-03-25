@@ -126,6 +126,18 @@
           "scope": "resource",
           "tags": ["experimental"],
           "markdownDescription": "Column to align hex byte decorations to. **Experimental**"
+        },
+        "rgbds.inlayHints.constantValues": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "markdownDescription": "Show resolved values of constants inline (e.g., `= $FF40` after `LCDC_CTRL`)"
+        },
+        "rgbds.inlayHints.macroParameters": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "markdownDescription": "Show parameter numbers at macro call sites (e.g., `\\1:` before the first argument)"
         }
       }
     },
