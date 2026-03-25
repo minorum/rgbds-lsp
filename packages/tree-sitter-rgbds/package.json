@@ -16,8 +16,10 @@
     "*.wasm"
   ],
   "scripts": {
+    "install": "node-gyp-build",
     "generate": "npx tree-sitter generate",
     "build": "npx tree-sitter generate",
+    "rebuild": "node-gyp rebuild",
     "test": "npx tree-sitter generate && npx tree-sitter test",
     "prebuildify": "prebuildify --napi --strip",
     "build-wasm": "tree-sitter build --wasm",

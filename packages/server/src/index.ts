@@ -6,4 +6,8 @@ process.on('uncaughtException', (err) => {
     process.exit(1);
 });
 
+// Exit cleanly when the parent process (VS Code/editor) disconnects the IPC channel.
+// Without this, orphaned server processes keep native addon .node files locked on Windows.
+process.on('disconnect', () => process.exit(0));
+
 import './server';
