@@ -693,10 +693,10 @@ connection.languages.inlayHint.on((params: InlayHintParams): InlayHint[] => {
     );
 
     return entries
-        .map(entry => ({
+        .map((entry): InlayHint => ({
             position: { line: entry.line, character: Number.MAX_SAFE_INTEGER },
             label: '  ' + entry.short,
-            kind: InlayHintKind.Parameter,
+            kind: InlayHintKind.Parameter as InlayHintKind,
             paddingLeft: true,
             tooltip: entry.full !== entry.short ? entry.full : undefined,
         }))
@@ -705,9 +705,9 @@ connection.languages.inlayHint.on((params: InlayHintParams): InlayHint[] => {
 
 // ─── Workspace Folder Changes ─────────────────────────────────
 
-connection.workspace.onDidChangeWorkspaceFolders(event => {
+try { connection.workspace.onDidChangeWorkspaceFolders(event => {
     // Index newly added folders
-    for (const added of event.event.added) {
+    for (const added of event.added) {
         const folderPath = uriToPath(added.uri);
         rgbdsIndexer.indexProjectAsync(folderPath)
             .then(result => {
@@ -722,7 +722,7 @@ connection.workspace.onDidChangeWorkspaceFolders(event => {
     }
 
     // Remove symbols from removed folders
-    for (const removed of event.event.removed) {
+    for (const removed of event.removed) {
         rgbdsIndexer.removeFolder(uriToPath(removed.uri));
         // Refresh diagnostics
         for (const doc of documents.all()) {
@@ -730,7 +730,7 @@ connection.workspace.onDidChangeWorkspaceFolders(event => {
             connection.sendDiagnostics({ uri: doc.uri, diagnostics });
         }
     }
-});
+}); } catch { /* client doesn't support workspace folder change notifications */ }
 
 // ─── Completion ───────────────────────────────────────────────
 
