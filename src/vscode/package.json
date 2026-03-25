@@ -81,21 +81,27 @@
           "type": "string",
           "default": "",
           "scope": "resource",
-          "tags": ["experimental"],
+          "tags": [
+            "experimental"
+          ],
           "markdownDescription": "Shell command to build the ROM (e.g., `make`). Runs automatically when `.asm`/`.inc` files are saved, producing the ROM and `.sym` file needed for inlay hints. **Experimental**"
         },
         "rgbds.romPath": {
           "type": "string",
           "default": "",
           "scope": "resource",
-          "tags": ["experimental"],
+          "tags": [
+            "experimental"
+          ],
           "markdownDescription": "Path to the built ROM file (`.gb`/`.gbc`). Leave empty for auto-detect. **Experimental**"
         },
         "rgbds.symPath": {
           "type": "string",
           "default": "",
           "scope": "resource",
-          "tags": ["experimental"],
+          "tags": [
+            "experimental"
+          ],
           "markdownDescription": "Path to the symbol file (`.sym`). Leave empty for auto-detect. **Experimental**"
         },
         "rgbds.validateCommentBytes": {
@@ -108,7 +114,9 @@
           "type": "boolean",
           "default": false,
           "scope": "resource",
-          "tags": ["experimental"],
+          "tags": [
+            "experimental"
+          ],
           "markdownDescription": "Show assembled hex bytes as decorations next to source lines. **Experimental**"
         },
         "rgbds.assembledBytes.maxBytesPerLine": {
@@ -116,7 +124,9 @@
           "default": 8,
           "minimum": 1,
           "scope": "resource",
-          "tags": ["experimental"],
+          "tags": [
+            "experimental"
+          ],
           "markdownDescription": "Maximum number of hex bytes to display per line. **Experimental**"
         },
         "rgbds.assembledBytes.alignColumn": {
@@ -124,7 +134,9 @@
           "default": 60,
           "minimum": 1,
           "scope": "resource",
-          "tags": ["experimental"],
+          "tags": [
+            "experimental"
+          ],
           "markdownDescription": "Column to align hex byte decorations to. **Experimental**"
         },
         "rgbds.inlayHints.constantValues": {
@@ -157,7 +169,10 @@
       {
         "name": "rgbdserror",
         "owner": "rgbds",
-        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "fileLocation": [
+          "autoDetect",
+          "${workspaceFolder}"
+        ],
         "pattern": {
           "regexp": "^(.+?)\\((\\d+)\\):\\s+(warning|ERROR):\\s+(.*)$",
           "file": 1,
@@ -169,7 +184,10 @@
       {
         "name": "rgbdslinkerror",
         "owner": "rgbds",
-        "fileLocation": ["autoDetect", "${workspaceFolder}"],
+        "fileLocation": [
+          "autoDetect",
+          "${workspaceFolder}"
+        ],
         "pattern": [
           {
             "regexp": "^(?:(.+?)\\((\\d+)\\):\\s+)?(warning|error|ERROR):\\s+(.*)$",
@@ -189,7 +207,7 @@
     "package": "npx @vscode/vsce package -o rgbds-lsp.vsix --no-dependencies"
   },
   "dependencies": {
-    "vscode-languageclient": "^9.0.1"
+    "vscode-languageclient": "^10.0.0-next.21"
   },
   "devDependencies": {
     "@types/vscode": "^1.75.0",
