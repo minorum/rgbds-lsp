@@ -25,18 +25,18 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        working-directory: packages/tree-sitter-rgbds
+        working-directory: src/tree-sitter-rgbds
         run: npm install --ignore-scripts
 
       - name: Build prebuilds
-        working-directory: packages/tree-sitter-rgbds
+        working-directory: src/tree-sitter-rgbds
         run: npx prebuildify --napi --strip
 
       - name: Upload prebuilds
         uses: actions/upload-artifact@v4
         with:
           name: prebuilds-${{ matrix.os }}
-          path: packages/tree-sitter-rgbds/prebuilds/
+          path: src/tree-sitter-rgbds/prebuilds/
 
   publish-npm:
     name: Publish to npm
@@ -56,27 +56,27 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: prebuilds-*
-          path: packages/tree-sitter-rgbds/prebuilds/
+          path: src/tree-sitter-rgbds/prebuilds/
           merge-multiple: true
 
       - name: List prebuilds
-        run: find packages/tree-sitter-rgbds/prebuilds/ -type f
+        run: find src/tree-sitter-rgbds/prebuilds/ -type f
 
       - name: Install dependencies
         run: npm install
 
       - name: Publish tree-sitter-rgbds
-        working-directory: packages/tree-sitter-rgbds
+        working-directory: src/tree-sitter-rgbds
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Build server
-        working-directory: packages/server
+        working-directory: src/server
         run: npx tsc -p tsconfig.json
 
       - name: Publish rgbds-language-server
-        working-directory: packages/server
+        working-directory: src/server
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
@@ -101,11 +101,11 @@ jobs:
         run: npm run build
 
       - name: Package VSIX
-        working-directory: packages/vscode
+        working-directory: src/vscode
         run: npx @vscode/vsce package -o rgbds-lsp.vsix --no-dependencies
 
       - name: Publish to VS Code Marketplace
-        working-directory: packages/vscode
+        working-directory: src/vscode
         run: npx @vscode/vsce publish --no-dependencies --packagePath rgbds-lsp.vsix
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -113,5 +113,5 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: packages/vscode/rgbds-lsp.vsix
+          files: src/vscode/rgbds-lsp.vsix
           generate_release_notes: true

@@ -21,11 +21,11 @@ jobs:
         run: npm install -g tree-sitter-cli
 
       - name: Generate parser
-        working-directory: packages/tree-sitter-rgbds
+        working-directory: src/tree-sitter-rgbds
         run: tree-sitter generate
 
       - name: Run grammar tests
-        working-directory: packages/tree-sitter-rgbds
+        working-directory: src/tree-sitter-rgbds
         run: tree-sitter test
 
   server:
@@ -43,18 +43,18 @@ jobs:
         run: npm install -g tree-sitter-cli
 
       - name: Generate parser (needed before npm install builds native addon)
-        working-directory: packages/tree-sitter-rgbds
+        working-directory: src/tree-sitter-rgbds
         run: tree-sitter generate
 
       - name: Install dependencies
         run: npm install
 
       - name: Build server
-        working-directory: packages/server
+        working-directory: src/server
         run: npx tsc -p tsconfig.json
 
       - name: Run integration tests
-        working-directory: packages/server
+        working-directory: src/server
         run: npx vitest run tests/integration.test.ts
 
   server-real-project:
@@ -72,18 +72,18 @@ jobs:
         run: npm install -g tree-sitter-cli
 
       - name: Generate parser
-        working-directory: packages/tree-sitter-rgbds
+        working-directory: src/tree-sitter-rgbds
         run: tree-sitter generate
 
       - name: Install dependencies
         run: npm install
 
       - name: Build server
-        working-directory: packages/server
+        working-directory: src/server
         run: npx tsc -p tsconfig.json
 
       - name: Run real project tests (pokecrystal)
-        working-directory: packages/server
+        working-directory: src/server
         run: npx vitest run tests/real-project.test.ts
         timeout-minutes: 5
 
@@ -101,5 +101,5 @@ jobs:
         run: npm install --ignore-scripts
 
       - name: Build extension
-        working-directory: packages/vscode
+        working-directory: src/vscode
         run: npx tsc -p tsconfig.json

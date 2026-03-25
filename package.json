@@ -2,7 +2,7 @@
   "name": "rgbds-lsp-monorepo",
   "private": true,
   "workspaces": [
-    "packages/*"
+    "src/*"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",

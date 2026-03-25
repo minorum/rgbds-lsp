@@ -22,8 +22,8 @@ Install `rgbds-lsp` from the [VS Code Marketplace](https://marketplace.visualstu
 
 ```bash
 npm install && npm run build
-cd packages/vscode && npx @vscode/vsce package -o rgbds-lsp.vsix --no-dependencies
-code --install-extension packages/vscode/rgbds-lsp.vsix
+cd src/vscode && npx @vscode/vsce package -o rgbds-lsp.vsix --no-dependencies
+code --install-extension src/vscode/rgbds-lsp.vsix
 ```
 
 ### Claude Code
@@ -71,9 +71,9 @@ file-types = ["asm", "inc"]
 
 | Package | Description | npm |
 |---|---|---|
-| [tree-sitter-rgbds](packages/tree-sitter-rgbds/) | Tree-sitter grammar | `@retro-dev/tree-sitter-rgbds` |
-| [server](packages/server/) | Language server | `@retro-dev/rgbds-language-server` |
-| [vscode](packages/vscode/) | VS Code extension | — |
+| [tree-sitter-rgbds](src/tree-sitter-rgbds/) | Tree-sitter grammar | `@retro-dev/tree-sitter-rgbds` |
+| [server](src/server/) | Language server | `@retro-dev/rgbds-language-server` |
+| [vscode](src/vscode/) | VS Code extension | — |
 
 ## Development
 
@@ -83,10 +83,10 @@ Requires Node.js 18+ and a C compiler (node-gyp builds the tree-sitter native ad
 git clone https://github.com/retro-dev-tools/rgbds-lsp.git && cd rgbds-lsp
 npm install && npm run build
 
-cd packages/server && npm test                              # unit + integration (vitest)
-cd packages/tree-sitter-rgbds && npx tree-sitter test       # grammar corpus
+cd src/server && npm test                              # unit + integration (vitest)
+cd src/tree-sitter-rgbds && npx tree-sitter test       # grammar corpus
 
-cd packages/vscode && code --extensionDevelopmentPath="$(pwd)"  # launch dev extension host
+cd src/vscode && code --extensionDevelopmentPath="$(pwd)"  # launch dev extension host
 ```
 
 ## License
