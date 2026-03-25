@@ -729,27 +729,22 @@ function computeDiagnostics(doc: TextDocument): Diagnostic[] {
     const uri = doc.uri;
 
     // Find references to undefined symbols in this file
-    for (const [name, refs] of rgbdsIndexer.references) {
-        if (rgbdsIndexer.definitions.has(name)) continue;
-
-        for (const ref of refs) {
-            if (ref.file !== uri) continue;
-            diagnostics.push({
-                range: Range.create(ref.line, ref.col, ref.line, ref.endCol),
-                severity: DiagnosticSeverity.Warning,
-                message: `Undefined symbol: ${name}`,
-                source: 'rgbds',
-            });
+    const fileRefNames = rgbdsIndexer.fileReferences.get(uri);
+    if (fileRefNames) {
+        for (const name of fileRefNames) {
+            if (rgbdsIndexer.definitions.has(name)) continue;
+            const refs = rgbdsIndexer.references.get(name);
+            if (!refs) continue;
+            for (const ref of refs) {
+                if (ref.file !== uri) continue;
+                diagnostics.push({
+                    range: Range.create(ref.line, ref.col, ref.line, ref.endCol),
+                    severity: DiagnosticSeverity.Warning,
+                    message: `Undefined symbol: ${name}`,
+                    source: 'rgbds',
+                });
+            }
         }
-    }
-
-    // Find duplicate definitions in this file
-    const seenInFile = new Map<string, number>();
-    for (const [name, def] of rgbdsIndexer.definitions) {
-        if (def.file !== uri) continue;
-        if (def.type === 'section') continue; // sections can be duplicated
-        // Check if another def with same name exists in a different file
-        // (We only report if we find multiple defs with same name)
     }
 
     // Validate hex byte annotations in comments against computed bytes

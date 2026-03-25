@@ -345,13 +345,23 @@ export class Indexer {
 
             // Collect definitions and references for this file
             const fileDefs: [string, SymbolDef][] = [];
-            for (const [name, def] of this.definitions) {
-                if (def.file === uri) fileDefs.push([name, def]);
+            const defNames = this.fileDefinitions.get(uri);
+            if (defNames) {
+                for (const name of defNames) {
+                    const def = this.definitions.get(name);
+                    if (def) fileDefs.push([name, def]);
+                }
             }
             const fileRefs: [string, SymbolRef[]][] = [];
-            for (const [name, refs] of this.references) {
-                const fileOnly = refs.filter(r => r.file === uri);
-                if (fileOnly.length > 0) fileRefs.push([name, fileOnly]);
+            const refNames = this.fileReferences.get(uri);
+            if (refNames) {
+                for (const name of refNames) {
+                    const refs = this.references.get(name);
+                    if (refs) {
+                        const inFile = refs.filter(r => r.file === uri);
+                        if (inFile.length > 0) fileRefs.push([name, inFile]);
+                    }
+                }
             }
             const fileIncludes: [string, IncludeRef[]][] = [];
             for (const [target, refs] of this.includers) {
