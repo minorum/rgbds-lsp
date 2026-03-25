@@ -162,6 +162,55 @@ export class LspTestClient {
         });
     }
 
+    async diagnostics(uri: string): Promise<unknown[]> {
+        // Wait for server to compute diagnostics
+        await new Promise(r => setTimeout(r, 500));
+        const diags = this.notifications
+            .filter(n => n.method === 'textDocument/publishDiagnostics' && (n.params as any).uri === uri)
+            .map(n => (n.params as any).diagnostics)
+            .flat();
+        return diags;
+    }
+
+    async inlayHint(uri: string, startLine: number, endLine: number): Promise<unknown> {
+        return this.request('textDocument/inlayHint', {
+            textDocument: { uri },
+            range: {
+                start: { line: startLine, character: 0 },
+                end: { line: endLine, character: 0 },
+            },
+        });
+    }
+
+    async signatureHelp(uri: string, line: number, character: number): Promise<unknown> {
+        return this.request('textDocument/signatureHelp', {
+            textDocument: { uri },
+            position: { line, character },
+        });
+    }
+
+    async semanticTokensFull(uri: string): Promise<unknown> {
+        return this.request('textDocument/semanticTokens/full', {
+            textDocument: { uri },
+        });
+    }
+
+    async semanticTokensRange(uri: string, startLine: number, endLine: number): Promise<unknown> {
+        return this.request('textDocument/semanticTokens/range', {
+            textDocument: { uri },
+            range: {
+                start: { line: startLine, character: 0 },
+                end: { line: endLine, character: 0 },
+            },
+        });
+    }
+
+    async foldingRange(uri: string): Promise<unknown> {
+        return this.request('textDocument/foldingRange', {
+            textDocument: { uri },
+        });
+    }
+
     /** Wait for background indexing to finish by polling definitions */
     async waitForIndexing(expectedDefs: number, timeoutMs = 30000): Promise<void> {
         const start = Date.now();

@@ -14,3 +14,9 @@ InitSystem:
     ret
 
 PLAYER_MAX_HP EQU $64
+
+; --- Macro for testing ---
+MACRO MyTestMacro
+    ld a, \1
+    ld [\2], a
+ENDM

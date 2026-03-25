@@ -144,6 +144,80 @@ describe('LSP integration', () => {
         });
     });
 
+    describe('inlay hints', () => {
+        it('should show constant value hints', async () => {
+            const testUri = fileUri('inlay_test.asm');
+            client.openDocument(testUri, [
+                'SECTION "Test", ROM0',
+                '    ld a, PLAYER_MAX_HP',
+            ].join('\n'));
+            await new Promise(r => setTimeout(r, 300));
+
+            const hints = await client.inlayHint(testUri, 0, 2) as any[];
+            // PLAYER_MAX_HP EQU $64 should show a constant value hint
+            expect(hints).not.toBeNull();
+            expect(Array.isArray(hints)).toBe(true);
+            expect(hints.length).toBeGreaterThan(0);
+            const valueHint = hints.find((h: any) => {
+                const label = typeof h.label === 'string' ? h.label : '';
+                return label.includes('$64') || label.includes('= $');
+            });
+            expect(valueHint).toBeDefined();
+        });
+    });
+
+    describe('semantic tokens', () => {
+        it('should return full semantic tokens', async () => {
+            const result = await client.semanticTokensFull(fileUri('main.asm')) as any;
+            expect(result).not.toBeNull();
+            expect(result.data).toBeDefined();
+            expect(result.data.length).toBeGreaterThan(0);
+        });
+
+        it('should return range semantic tokens', async () => {
+            const result = await client.semanticTokensRange(fileUri('main.asm'), 0, 5) as any;
+            expect(result).not.toBeNull();
+            expect(result.data).toBeDefined();
+        });
+    });
+
+    describe('folding ranges', () => {
+        it('should return folding ranges for sections', async () => {
+            const result = await client.foldingRange(fileUri('main.asm')) as any[];
+            expect(result).not.toBeNull();
+            expect(Array.isArray(result)).toBe(true);
+            expect(result.length).toBeGreaterThan(0);
+        });
+    });
+
+    describe('rename errors', () => {
+        it('should reject invalid identifier names', async () => {
+            try {
+                await client.rename(fileUri('main.asm'), 2, 0, '123invalid');
+                expect.fail('Should have thrown');
+            } catch (e: any) {
+                expect(e.message).toContain('Invalid');
+            }
+        });
+    });
+
+    describe('signature help', () => {
+        it('should provide signature for macro invocations', async () => {
+            const testUri = fileUri('sig_test.asm');
+            client.openDocument(testUri, [
+                'SECTION "SigTest", ROM0',
+                '    MyTestMacro $FF, $C000',
+            ].join('\n'));
+            await new Promise(r => setTimeout(r, 300));
+
+            // Position inside the macro arguments (after "MyTestMacro ")
+            const result = await client.signatureHelp(testUri, 1, 20) as any;
+            expect(result).not.toBeNull();
+            expect(result.signatures.length).toBeGreaterThan(0);
+            expect(result.signatures[0].label).toContain('MyTestMacro');
+        });
+    });
+
     describe('incremental reindex', () => {
         it('should update symbols when a file changes', async () => {
             // Verify InitSystem exists before the change
