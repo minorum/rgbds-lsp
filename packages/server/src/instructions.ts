@@ -6,6 +6,7 @@ export interface InstructionForm {
     cycles: string;
     flags: string;
     description: string;
+    opcode?: number[];
 }
 
 export const SM83_INSTRUCTIONS: InstructionForm[] = [
@@ -29,6 +30,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:? C:?",
         description: "Add the byte pointed to by HL plus the carry flag to A.",
+        opcode: [0x8E],
     },
     {
         label: "adc a, n8",
@@ -38,6 +40,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:? C:?",
         description: "Add the value n8 plus the carry flag to A.",
+        opcode: [0xCE],
     },
 
     // ========================================================================
@@ -60,6 +63,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:? C:?",
         description: "Add the byte pointed to by HL to A.",
+        opcode: [0x86],
     },
     {
         label: "add a, n8",
@@ -69,6 +73,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:? C:?",
         description: "Add the value n8 to A.",
+        opcode: [0xC6],
     },
     {
         label: "add hl, r16",
@@ -87,6 +92,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:- N:0 H:? C:?",
         description: "Add the value in SP to HL.",
+        opcode: [0x39],
     },
     {
         label: "add sp, e8",
@@ -96,6 +102,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "Z:0 N:0 H:? C:?",
         description: "Add the signed value e8 to SP.",
+        opcode: [0xE8],
     },
 
     // ========================================================================
@@ -118,6 +125,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:1 C:0",
         description: "Bitwise AND between the byte pointed to by HL and A.",
+        opcode: [0xA6],
     },
     {
         label: "and a, n8",
@@ -127,6 +135,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:1 C:0",
         description: "Bitwise AND between the value n8 and A.",
+        opcode: [0xE6],
     },
 
     // ========================================================================
@@ -162,6 +171,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "24",
         flags: "-",
         description: "Call address n16. Push address of next instruction on the stack, then jump to n16.",
+        opcode: [0xCD],
     },
     {
         label: "call cc, n16",
@@ -184,6 +194,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "Z:- N:0 H:0 C:~C",
         description: "Complement Carry Flag.",
+        opcode: [0x3F],
     },
 
     // ========================================================================
@@ -206,6 +217,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:1 H:? C:?",
         description: "Subtract the byte pointed to by HL from A and set flags accordingly, but discard the result.",
+        opcode: [0xBE],
     },
     {
         label: "cp a, n8",
@@ -215,6 +227,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:1 H:? C:?",
         description: "Subtract the value n8 from A and set flags accordingly, but discard the result.",
+        opcode: [0xFE],
     },
 
     // ========================================================================
@@ -228,6 +241,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "Z:- N:1 H:1 C:-",
         description: "Complement accumulator (A = ~A).",
+        opcode: [0x2F],
     },
 
     // ========================================================================
@@ -241,6 +255,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "Z:? N:- H:0 C:?",
         description: "Decimal Adjust Accumulator to get a correct BCD representation after an arithmetic instruction.",
+        opcode: [0x27],
     },
 
     // ========================================================================
@@ -263,6 +278,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "12",
         flags: "Z:? N:1 H:? C:-",
         description: "Decrement the byte pointed to by HL by 1.",
+        opcode: [0x35],
     },
     {
         label: "dec r16",
@@ -281,6 +297,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "-",
         description: "Decrement value in register SP by 1.",
+        opcode: [0x3B],
     },
 
     // ========================================================================
@@ -294,6 +311,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "-",
         description: "Disable Interrupts by clearing the IME flag.",
+        opcode: [0xF3],
     },
 
     // ========================================================================
@@ -307,6 +325,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "-",
         description: "Enable Interrupts by setting the IME flag. The flag is only set after the instruction following EI.",
+        opcode: [0xFB],
     },
 
     // ========================================================================
@@ -320,6 +339,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "-",
         description: "Enter CPU low-power consumption mode until an interrupt occurs.",
+        opcode: [0x76],
     },
 
     // ========================================================================
@@ -342,6 +362,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "12",
         flags: "Z:? N:0 H:? C:-",
         description: "Increment the byte pointed to by HL by 1.",
+        opcode: [0x34],
     },
     {
         label: "inc r16",
@@ -360,6 +381,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "-",
         description: "Increment value in register SP by 1.",
+        opcode: [0x33],
     },
 
     // ========================================================================
@@ -373,6 +395,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "-",
         description: "Jump to address n16.",
+        opcode: [0xC3],
     },
     {
         label: "jp cc, n16",
@@ -391,6 +414,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "-",
         description: "Jump to address in HL; copy the value in HL into PC.",
+        opcode: [0xE9],
     },
 
     // ========================================================================
@@ -404,6 +428,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "12",
         flags: "-",
         description: "Relative Jump by adding e8 to the address of the instruction following the JR.",
+        opcode: [0x18],
     },
     {
         label: "jr cc, e8",
@@ -462,6 +487,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "12",
         flags: "-",
         description: "Store the value n8 into the byte pointed to by HL.",
+        opcode: [0x36],
     },
     {
         label: "ld r8, [hl]",
@@ -489,6 +515,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "-",
         description: "Store the value in A into the byte at address n16.",
+        opcode: [0xEA],
     },
     {
         label: "ld a, [r16]",
@@ -507,6 +534,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "-",
         description: "Load the byte at address n16 into A.",
+        opcode: [0xFA],
     },
     {
         label: "ld [hl+], a",
@@ -516,6 +544,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "-",
         description: "Store A into the byte pointed to by HL and increment HL afterwards.",
+        opcode: [0x22],
     },
     {
         label: "ld [hl-], a",
@@ -525,6 +554,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "-",
         description: "Store A into the byte pointed to by HL and decrement HL afterwards.",
+        opcode: [0x32],
     },
     {
         label: "ld a, [hl+]",
@@ -534,6 +564,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "-",
         description: "Load the byte pointed to by HL into A and increment HL afterwards.",
+        opcode: [0x2A],
     },
     {
         label: "ld a, [hl-]",
@@ -543,6 +574,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "-",
         description: "Load the byte pointed to by HL into A and decrement HL afterwards.",
+        opcode: [0x3A],
     },
     {
         label: "ld sp, n16",
@@ -552,6 +584,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "12",
         flags: "-",
         description: "Load the value n16 into SP.",
+        opcode: [0x31],
     },
     {
         label: "ld [n16], sp",
@@ -561,6 +594,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "20",
         flags: "-",
         description: "Store SP & $FF at address n16 and SP >> 8 at address n16 + 1.",
+        opcode: [0x08],
     },
     {
         label: "ld hl, sp+e8",
@@ -570,6 +604,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "12",
         flags: "Z:0 N:0 H:? C:?",
         description: "Add the signed value e8 to SP and store the result in HL.",
+        opcode: [0xF8],
     },
     {
         label: "ld sp, hl",
@@ -579,6 +614,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "-",
         description: "Copy HL into SP.",
+        opcode: [0xF9],
     },
 
     // ========================================================================
@@ -592,6 +628,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "12",
         flags: "-",
         description: "Store A into the byte at address n16, which must be between $FF00 and $FFFF.",
+        opcode: [0xE0],
     },
     {
         label: "ldh [c], a",
@@ -601,6 +638,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "-",
         description: "Store A into the byte at address $FF00+C.",
+        opcode: [0xE2],
     },
     {
         label: "ldh a, [n16]",
@@ -610,6 +648,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "12",
         flags: "-",
         description: "Load the byte at address n16 into A. Address must be between $FF00 and $FFFF.",
+        opcode: [0xF0],
     },
     {
         label: "ldh a, [c]",
@@ -619,6 +658,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "-",
         description: "Load the byte at address $FF00+C into A.",
+        opcode: [0xF2],
     },
 
     // ========================================================================
@@ -632,6 +672,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "-",
         description: "No OPeration.",
+        opcode: [0x00],
     },
 
     // ========================================================================
@@ -654,6 +695,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:0 C:0",
         description: "Bitwise OR between the byte pointed to by HL and A.",
+        opcode: [0xB6],
     },
     {
         label: "or a, n8",
@@ -663,6 +705,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:0 C:0",
         description: "Bitwise OR between the value n8 and A.",
+        opcode: [0xF6],
     },
 
     // ========================================================================
@@ -676,6 +719,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "12",
         flags: "Z:? N:? H:? C:?",
         description: "Pop register AF from the stack. Restores all flags.",
+        opcode: [0xF1],
     },
     {
         label: "pop r16",
@@ -698,6 +742,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "-",
         description: "Push register AF onto the stack.",
+        opcode: [0xF5],
     },
     {
         label: "push r16",
@@ -742,6 +787,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "-",
         description: "Return from subroutine. Pop PC from the stack.",
+        opcode: [0xC9],
     },
     {
         label: "ret cc",
@@ -764,6 +810,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "-",
         description: "Return from subroutine and enable interrupts.",
+        opcode: [0xD9],
     },
 
     // ========================================================================
@@ -786,6 +833,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "Z:? N:0 H:0 C:?",
         description: "Rotate the byte pointed to by HL left through carry.",
+        opcode: [0xCB, 0x16],
     },
 
     // ========================================================================
@@ -799,6 +847,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "Z:0 N:0 H:0 C:?",
         description: "Rotate A left through carry.",
+        opcode: [0x17],
     },
 
     // ========================================================================
@@ -821,6 +870,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "Z:? N:0 H:0 C:?",
         description: "Rotate the byte pointed to by HL left.",
+        opcode: [0xCB, 0x06],
     },
 
     // ========================================================================
@@ -834,6 +884,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "Z:0 N:0 H:0 C:?",
         description: "Rotate A left.",
+        opcode: [0x07],
     },
 
     // ========================================================================
@@ -856,6 +907,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "Z:? N:0 H:0 C:?",
         description: "Rotate the byte pointed to by HL right through carry.",
+        opcode: [0xCB, 0x1E],
     },
 
     // ========================================================================
@@ -869,6 +921,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "Z:0 N:0 H:0 C:?",
         description: "Rotate A right through carry.",
+        opcode: [0x1F],
     },
 
     // ========================================================================
@@ -891,6 +944,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "Z:? N:0 H:0 C:?",
         description: "Rotate the byte pointed to by HL right.",
+        opcode: [0xCB, 0x0E],
     },
 
     // ========================================================================
@@ -904,6 +958,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "Z:0 N:0 H:0 C:?",
         description: "Rotate A right.",
+        opcode: [0x0F],
     },
 
     // ========================================================================
@@ -939,6 +994,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:1 H:? C:?",
         description: "Subtract the byte pointed to by HL and the carry flag from A.",
+        opcode: [0x9E],
     },
     {
         label: "sbc a, n8",
@@ -948,6 +1004,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:1 H:? C:?",
         description: "Subtract the value n8 and the carry flag from A.",
+        opcode: [0xDE],
     },
 
     // ========================================================================
@@ -961,6 +1018,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "Z:- N:0 H:0 C:1",
         description: "Set Carry Flag.",
+        opcode: [0x37],
     },
 
     // ========================================================================
@@ -1005,6 +1063,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "Z:? N:0 H:0 C:?",
         description: "Shift Left Arithmetically the byte pointed to by HL.",
+        opcode: [0xCB, 0x26],
     },
 
     // ========================================================================
@@ -1027,6 +1086,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "Z:? N:0 H:0 C:?",
         description: "Shift Right Arithmetically the byte pointed to by HL (bit 7 unchanged).",
+        opcode: [0xCB, 0x2E],
     },
 
     // ========================================================================
@@ -1049,6 +1109,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "Z:? N:0 H:0 C:?",
         description: "Shift Right Logically the byte pointed to by HL.",
+        opcode: [0xCB, 0x3E],
     },
 
     // ========================================================================
@@ -1062,6 +1123,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "4",
         flags: "-",
         description: "Enter CPU very low power mode. Also used to switch between double and normal speed modes on GBC.",
+        opcode: [0x10, 0x00],
     },
 
     // ========================================================================
@@ -1084,6 +1146,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:1 H:? C:?",
         description: "Subtract the byte pointed to by HL from A.",
+        opcode: [0x96],
     },
     {
         label: "sub a, n8",
@@ -1093,6 +1156,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:1 H:? C:?",
         description: "Subtract the value n8 from A.",
+        opcode: [0xD6],
     },
 
     // ========================================================================
@@ -1115,6 +1179,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "16",
         flags: "Z:? N:0 H:0 C:0",
         description: "Swap the upper 4 bits in the byte pointed to by HL and the lower 4 ones.",
+        opcode: [0xCB, 0x36],
     },
 
     // ========================================================================
@@ -1137,6 +1202,7 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:0 C:0",
         description: "Bitwise XOR between the byte pointed to by HL and A.",
+        opcode: [0xAE],
     },
     {
         label: "xor a, n8",
@@ -1146,5 +1212,6 @@ export const SM83_INSTRUCTIONS: InstructionForm[] = [
         cycles: "8",
         flags: "Z:? N:0 H:0 C:0",
         description: "Bitwise XOR between the value n8 and A.",
+        opcode: [0xEE],
     },
 ];

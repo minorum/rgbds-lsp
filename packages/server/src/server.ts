@@ -45,7 +45,7 @@ import { computeSemanticTokens, SEMANTIC_TOKENS_LEGEND } from './semantic-tokens
 import { getFoldingRanges } from './folding';
 import { getCodeActions } from './code-actions';
 import { matchInstructionForm } from './instruction-matcher';
-import { getAssembledBytesData, AssembledBytesSettings, DEFAULT_ASSEMBLED_BYTES_SETTINGS, validateCommentBytes, formatBytesFlat } from './inlay-hints';
+import { getAssembledBytesData, AssembledBytesSettings, DEFAULT_ASSEMBLED_BYTES_SETTINGS, validateCommentBytes, formatBytesFlat } from './assembled-bytes';
 import * as fs from 'fs';
 import * as path from 'path';
 
