@@ -17,9 +17,9 @@
   ],
   "scripts": {
     "generate": "npx tree-sitter generate",
-    "build": "npx node-gyp rebuild",
+    "build": "npx tree-sitter generate",
     "test": "npx tree-sitter generate && npx tree-sitter test",
-    "prebuild": "prebuildify --napi --strip",
+    "prebuildify": "prebuildify --napi --strip",
     "build-wasm": "tree-sitter build --wasm",
     "parse": "tree-sitter parse"
   },

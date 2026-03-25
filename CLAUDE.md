@@ -40,14 +40,19 @@ VS Code Extension  ──►  LSP Server  ──►  Tree-sitter Parser
 - Test corpus in `test/corpus/*.txt` — add tests here when modifying grammar rules
 
 ### server (`packages/server/src/`)
-- `server.ts` — LSP connection setup and all protocol handlers (definition, references, hover, completion, rename, diagnostics, document symbols)
+- `server.ts` — LSP connection setup and all protocol handlers (definition, references, hover, completion, rename, diagnostics, document symbols, inlay hints)
 - `indexer.ts` — Core engine: parses files with tree-sitter, walks ASTs to extract symbol definitions and references. Maintains two maps: `definitions` and `references`. Handles local label scoping by prefixing `.local` names with their parent global label
-- `types.ts` — Shared interfaces (`SymbolDefinition`, `SymbolReference`)
+- `instruction-matcher.ts` — Matches AST instruction nodes to SM83 instruction forms (shared by hover and inlay hints)
+- `rom-reader.ts` — Reads ROM binary and `.sym` files for inlay hints. Parses sym format, computes bank:address → ROM offset mapping
+- `inlay-hints.ts` — Computes inlay hints by walking AST with ROM data anchored at label addresses
+- `types.ts` — Shared interfaces (`SymbolDef`, `SymbolRef`)
 - `utils.ts` — File path utilities
 
 ### vscode (`packages/vscode/`)
-- Thin client that launches the server via stdio
+- Thin client that launches the server via IPC
 - TextMate grammar in `syntaxes/rgbds.tmLanguage.json` for syntax highlighting
+- Makefile auto-detection for build configuration
+- Language status bar item for build settings
 
 ## Key Design Details
 
@@ -56,6 +61,8 @@ VS Code Extension  ──►  LSP Server  ──►  Tree-sitter Parser
 - **Incremental indexing**: On file change, only the changed file is re-indexed (`indexFile`). Full project scan happens at startup (`indexProject`).
 - **Diagnostics**: Warns on undefined symbol references. Max 200 per file.
 - **Indexer cache**: Stored in `~/.rgbds-lsp/cache/` keyed by workspace path hash. Clear cache after changing symbol extraction logic.
+- **Inlay hints (experimental)**: Shows assembled hex bytes next to source lines. Requires a built ROM (`.gb`/`.gbc`) and symbol file (`.sym`). The server reads actual bytes from the ROM, using labels from the sym file as anchor points to map source lines to ROM offsets.
+- **Makefile convention**: The extension auto-detects build config from Makefiles. Standard variables: `ROM` (output ROM path), `SYM` (output symbol file path). Standard targets: `all` (build), `clean`. The extension sets `rgbds.buildCommand`, `rgbds.romPath`, `rgbds.symPath` from these if not already configured.
 
 ## Versioning
 

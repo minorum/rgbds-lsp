@@ -41,7 +41,7 @@ module.exports = grammar({
 
     statement: $ => choice($.instruction, $.directive, $.macro_invocation),
 
-    line_continuation: _ => token(seq('\\', /[ \t]*\r?\n/)),
+    line_continuation: _ => token(seq('\\', /[ \t]*/, optional(/;[^\r\n]*/), /\r?\n/)),
 
     // ─── Comments ─────────────────────────────────────────────
 
