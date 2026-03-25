@@ -816,6 +816,33 @@ function computeDiagnostics(doc: TextDocument): Diagnostic[] {
         }
     }
 
+    // Cross-file duplicate definitions
+    const fileDefNames = rgbdsIndexer.fileDefinitions.get(uri);
+    if (fileDefNames) {
+        for (const name of fileDefNames) {
+            const allDefs = rgbdsIndexer.allDefinitions.get(name);
+            if (!allDefs || allDefs.length <= 1) continue;
+            const thisDef = allDefs.find(d => d.file === uri);
+            if (!thisDef || thisDef.type === 'section') continue;
+
+            const otherFiles = allDefs
+                .filter(d => d.file !== uri)
+                .map(d => {
+                    const parts = d.file.split('/');
+                    return parts[parts.length - 1];
+                });
+
+            if (otherFiles.length > 0) {
+                diagnostics.push({
+                    range: Range.create(thisDef.line, thisDef.col, thisDef.line, thisDef.endCol),
+                    severity: DiagnosticSeverity.Warning,
+                    message: `Duplicate symbol "${name}" (also defined in ${otherFiles.join(', ')})`,
+                    source: 'rgbds',
+                });
+            }
+        }
+    }
+
     // Validate hex byte annotations in comments against computed bytes
     if (validateCommentBytesEnabled) {
         const tree = rgbdsIndexer.getTree(uri);

@@ -34,6 +34,7 @@ function cachePath(rootDir: string): string {
 
 export class Indexer {
     public definitions: Map<string, SymbolDef> = new Map();
+    public allDefinitions: Map<string, SymbolDef[]> = new Map();
     public references: Map<string, SymbolRef[]> = new Map();
     public includers: Map<string, IncludeRef[]> = new Map();
     public onLog: ((message: string) => void) | null = null;
@@ -87,6 +88,7 @@ export class Indexer {
 
     public clearAll(): void {
         this.definitions.clear();
+        this.allDefinitions.clear();
         this.references.clear();
         this.includers.clear();
         this.fileDefinitions.clear();
@@ -167,6 +169,12 @@ export class Indexer {
         for (const [name, def] of Array.from(this.definitions)) {
             if (def.file === uri) this.definitions.delete(name);
         }
+        // Remove old allDefinitions entries from this file
+        for (const [name, defs] of Array.from(this.allDefinitions)) {
+            const filtered = defs.filter(d => d.file !== uri);
+            if (filtered.length === 0) this.allDefinitions.delete(name);
+            else this.allDefinitions.set(name, filtered);
+        }
         // Remove old references from this file
         for (const [name, refs] of Array.from(this.references)) {
             const filtered = refs.filter(r => r.file !== uri);
@@ -220,6 +228,9 @@ export class Indexer {
                     // Restore from cache — skip parsing
                     for (const [name, def] of entry.definitions) {
                         this.definitions.set(name, def);
+                        let allDefs = this.allDefinitions.get(name);
+                        if (!allDefs) { allDefs = []; this.allDefinitions.set(name, allDefs); }
+                        allDefs.push(def);
                         let fileDefs = this.fileDefinitions.get(uri);
                         if (!fileDefs) { fileDefs = new Set(); this.fileDefinitions.set(uri, fileDefs); }
                         fileDefs.add(name);
@@ -389,6 +400,7 @@ export class Indexer {
 
     private rebuildIndex(): void {
         this.definitions.clear();
+        this.allDefinitions.clear();
         this.references.clear();
         this.fileDefinitions.clear();
         this.fileReferences.clear();
@@ -561,7 +573,7 @@ export class Indexer {
             const nameNode = labelNode.childForFieldName('name');
             if (!nameNode) return;
             const name = nameNode.text;
-            this.definitions.set(name, {
+            this.addDef(name, {
                 name,
                 type: 'label',
                 file: uri,
@@ -580,7 +592,7 @@ export class Indexer {
             if (!nameNode) return;
             const localName = nameNode.text; // .something
             const scopedName = currentGlobal ? `${currentGlobal}${localName}` : localName;
-            this.definitions.set(scopedName, {
+            this.addDef(scopedName, {
                 name: scopedName,
                 type: 'label',
                 file: uri,
@@ -609,7 +621,7 @@ export class Indexer {
             // Extract the value expression text
             const exprNode = directive.namedChildren.find(c => c.type === 'expression');
             const value = exprNode?.text;
-            this.definitions.set(name, {
+            this.addDef(name, {
                 name,
                 type: 'constant',
                 file: uri,
@@ -631,7 +643,7 @@ export class Indexer {
         } else if (directive.type === 'macro_start') {
             const nameNode = directive.childForFieldName('name');
             if (!nameNode) return;
-            this.definitions.set(nameNode.text, {
+            this.addDef(nameNode.text, {
                 name: nameNode.text,
                 type: 'macro',
                 file: uri,
@@ -648,7 +660,7 @@ export class Indexer {
             const stringNode = directive.children.find(c => c.type === 'string');
             if (stringNode) {
                 const name = stripQuotes(stringNode.text);
-                this.definitions.set(name, {
+                this.addDef(name, {
                     name,
                     type: 'section',
                     file: uri,
@@ -704,7 +716,7 @@ export class Indexer {
             // NEWCHARMAP defines a charmap name
             const nameNode = directive.namedChildren.find(c => c.type === 'identifier');
             if (nameNode) {
-                this.definitions.set(nameNode.text, {
+                this.addDef(nameNode.text, {
                     name: nameNode.text,
                     type: 'charmap',
                     file: uri,
@@ -799,6 +811,13 @@ export class Indexer {
         }
     }
 
+    private addDef(name: string, def: SymbolDef): void {
+        this.definitions.set(name, def);
+        let allDefs = this.allDefinitions.get(name);
+        if (!allDefs) { allDefs = []; this.allDefinitions.set(name, allDefs); }
+        allDefs.push(def);
+    }
+
     private addRef(name: string, ref: SymbolRef): void {
         let refs = this.references.get(name);
         if (!refs) {
@@ -822,6 +841,12 @@ export class Indexer {
             if (uri.startsWith(folderUri)) {
                 for (const name of defNames) {
                     this.definitions.delete(name);
+                    const allDefs = this.allDefinitions.get(name);
+                    if (allDefs) {
+                        const filtered = allDefs.filter(d => !d.file.startsWith(folderUri));
+                        if (filtered.length === 0) this.allDefinitions.delete(name);
+                        else this.allDefinitions.set(name, filtered);
+                    }
                 }
                 this.fileDefinitions.delete(uri);
             }
