@@ -1,6 +1,6 @@
 import Parser from 'tree-sitter';
-import { SymbolDef, SymbolRef } from './types';
-import { pathToUri, collectRgbdsFiles } from './utils';
+import { SymbolDef, SymbolRef, IncludeRef, CharmapStateChange, CharmapSegment, CharmapEntry } from './types';
+import { pathToUri, uriToPath, collectRgbdsFiles } from './utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -8,13 +8,14 @@ import * as crypto from 'crypto';
 // Load tree-sitter-rgbds grammar
 const rgbdsLanguage = require('@minorum/tree-sitter-rgbds');
 
-const CACHE_VERSION = 1;
+const CACHE_VERSION = 2;
 const CACHE_DIR = path.join(require('os').homedir(), '.rgbds-lsp', 'cache');
 
 interface CacheEntry {
     hash: string;
     definitions: [string, SymbolDef][];
     references: [string, SymbolRef[]][];
+    includes: [string, IncludeRef[]][];
 }
 
 interface CacheFile {
@@ -34,7 +35,15 @@ function cachePath(rootDir: string): string {
 export class Indexer {
     public definitions: Map<string, SymbolDef> = new Map();
     public references: Map<string, SymbolRef[]> = new Map();
+    public includers: Map<string, IncludeRef[]> = new Map();
     public onLog: ((message: string) => void) | null = null;
+
+    /** Charmap entries: charmap name → (source string → entry with bytes + location) */
+    public charmapEntries: Map<string, Map<string, CharmapEntry>> = new Map();
+    /** Active charmap state changes per file: file URI → sorted [{line, charmap}] */
+    public charmapState: Map<string, CharmapStateChange[]> = new Map();
+    /** Tracks which charmap CHARMAP entries are added to during indexing */
+    private currentCharmapDef: string = '';
 
     private parser: Parser;
     private trees: Map<string, Parser.Tree> = new Map();
@@ -58,12 +67,80 @@ export class Indexer {
         return this.trees.get(uri);
     }
 
+    /** Get tree, parsing on-demand from cached content if needed. */
+    public getOrParseTree(uri: string): Parser.Tree | undefined {
+        let tree = this.trees.get(uri);
+        if (tree) return tree;
+        const content = this.fileContents.get(uri);
+        if (content) {
+            tree = this.parser.parse(content);
+            this.trees.set(uri, tree);
+            return tree;
+        }
+        return undefined;
+    }
+
     public clearAll(): void {
         this.definitions.clear();
         this.references.clear();
+        this.includers.clear();
         this.trees.clear();
         this.fileContents.clear();
         this.indexedFileUris.clear();
+        this.charmapEntries.clear();
+        this.charmapState.clear();
+    }
+
+    /** Get the active charmap name at a given file position */
+    public getActiveCharmap(uri: string, line: number): string | null {
+        const states = this.charmapState.get(uri);
+        if (!states || states.length === 0) return null;
+        // Find the last state change at or before this line
+        let active: string | null = null;
+        for (const s of states) {
+            if (s.line <= line) active = s.charmap;
+            else break;
+        }
+        return active;
+    }
+
+    /** A segment of a string encoded via charmap */
+    public encodeString(charmapName: string, str: string): CharmapSegment[] | null {
+        const entries = this.charmapEntries.get(charmapName);
+        if (!entries) return null;
+
+        const segments: CharmapSegment[] = [];
+        let i = 0;
+        while (i < str.length) {
+            let matched = false;
+            for (let len = Math.min(str.length - i, 64); len > 0; len--) {
+                const substr = str.substring(i, i + len);
+                const entry = entries.get(substr);
+                if (entry) {
+                    segments.push({ source: substr, bytes: entry.bytes, isMte: len > 1 });
+                    i += len;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                segments.push({ source: str[i], bytes: [str.charCodeAt(i)], isMte: false });
+                i++;
+            }
+        }
+        return segments;
+    }
+
+    /** Get flat bytes from encoding */
+    public encodeStringBytes(charmapName: string, str: string): number[] | null {
+        const segments = this.encodeString(charmapName, str);
+        if (!segments) return null;
+        return segments.flatMap(s => s.bytes);
+    }
+
+    /** Look up the CHARMAP definition for a substring in a charmap */
+    public getCharmapEntryDef(charmapName: string, substr: string): CharmapEntry | null {
+        return this.charmapEntries.get(charmapName)?.get(substr) || null;
     }
 
     public indexFile(uri: string, content: string): void {
@@ -78,16 +155,25 @@ export class Indexer {
     /** Remove symbols for a single file and re-extract them. */
     private reindexFile(uri: string, tree: Parser.Tree): void {
         // Remove old definitions from this file
-        for (const [name, def] of this.definitions) {
+        for (const [name, def] of Array.from(this.definitions)) {
             if (def.file === uri) this.definitions.delete(name);
         }
         // Remove old references from this file
-        for (const [name, refs] of this.references) {
+        for (const [name, refs] of Array.from(this.references)) {
             const filtered = refs.filter(r => r.file !== uri);
             if (filtered.length === 0) {
                 this.references.delete(name);
             } else {
                 this.references.set(name, filtered);
+            }
+        }
+        // Remove old include records from this file
+        for (const [target, refs] of Array.from(this.includers)) {
+            const filtered = refs.filter(r => r.from !== uri);
+            if (filtered.length === 0) {
+                this.includers.delete(target);
+            } else {
+                this.includers.set(target, filtered);
             }
         }
         // Re-extract symbols for this file only
@@ -118,12 +204,16 @@ export class Indexer {
     }
 
     public async indexProjectAsync(rootDir: string): Promise<{ indexed: number; failed: number }> {
+        const t0 = Date.now();
         const files = collectRgbdsFiles(rootDir);
-        this.log(`Found ${files.length} .asm/.inc files in ${rootDir}`);
+        const tScan = Date.now();
+        this.log(`Found ${files.length} .asm/.inc files in ${rootDir} (${tScan - t0}ms)`);
 
         // Load cache
         const cacheFile = cachePath(rootDir);
         const cache = this.loadCache(cacheFile);
+        const tCache = Date.now();
+        if (cache) this.log(`Cache loaded (${tCache - tScan}ms)`);
         let indexed = 0;
         let cached = 0;
         let failed = 0;
@@ -151,6 +241,16 @@ export class Indexer {
                             this.references.set(name, [...refs]);
                         }
                     }
+                    if (entry.includes) {
+                        for (const [target, refs] of entry.includes) {
+                            const existing = this.includers.get(target);
+                            if (existing) {
+                                existing.push(...refs);
+                            } else {
+                                this.includers.set(target, [...refs]);
+                            }
+                        }
+                    }
                     cached++;
                 } else {
                     // Parse and extract
@@ -176,11 +276,60 @@ export class Indexer {
             }
         }
 
+        const tIndex = Date.now();
+
+        // Extract charmap data (needs trees, so parse on-demand for cached files)
+        this.extractAllCharmaps();
+        const tCharmap = Date.now();
+
         // Save cache for next startup
         this.saveCache(cacheFile, files);
-        this.log(`Cache: ${cached} files from cache, ${indexed} parsed fresh`);
+        const tSave = Date.now();
+        this.log(`Indexing: ${tIndex - tCache}ms (${cached} cached, ${indexed} parsed) | Charmaps: ${tCharmap - tIndex}ms | Cache save: ${tSave - tCharmap}ms | Total: ${tSave - t0}ms`);
 
         return { indexed: indexed + cached, failed };
+    }
+
+    /**
+     * Scan all indexed files for charmap definitions and state.
+     * Runs after initial indexing to ensure charmap data is available
+     * even when files were loaded from cache (no extractSymbols call).
+     */
+    private extractAllCharmaps(): void {
+        this.charmapEntries.clear();
+        this.charmapState.clear();
+        this.currentCharmapDef = '';
+
+        for (const uri of this.indexedFileUris) {
+            const tree = this.getOrParseTree(uri);
+            if (!tree) continue;
+
+            const charmapStack: string[] = [];
+            const fileCharmapState: CharmapStateChange[] = [];
+
+            for (const lineNode of tree.rootNode.children) {
+                if (lineNode.type !== 'line' && lineNode.type !== 'final_line') continue;
+                const line = lineNode.startPosition.row;
+
+                for (const child of lineNode.namedChildren) {
+                    if (child.type === 'statement') {
+                        for (const stmt of child.children) {
+                            this.trackCharmapState(stmt, line, uri, fileCharmapState, charmapStack);
+                        }
+                    } else if (child.type === 'directive') {
+                        this.trackCharmapState(child, line, uri, fileCharmapState, charmapStack);
+                    }
+                }
+            }
+
+            if (fileCharmapState.length > 0) {
+                this.charmapState.set(uri, fileCharmapState);
+            }
+        }
+
+        let totalEntries = 0;
+        for (const [, entries] of this.charmapEntries) totalEntries += entries.size;
+        this.log(`Charmap data: ${this.charmapEntries.size} charmaps, ${totalEntries} entries, ${this.charmapState.size} files with state`);
     }
 
     private loadCache(cachePath: string): CacheFile | null {
@@ -212,11 +361,17 @@ export class Indexer {
                 const fileOnly = refs.filter(r => r.file === uri);
                 if (fileOnly.length > 0) fileRefs.push([name, fileOnly]);
             }
+            const fileIncludes: [string, IncludeRef[]][] = [];
+            for (const [target, refs] of this.includers) {
+                const fileOnly = refs.filter(r => r.from === uri);
+                if (fileOnly.length > 0) fileIncludes.push([target, fileOnly]);
+            }
 
             cache.files[filePath] = {
                 hash: contentHash(content),
                 definitions: fileDefs,
                 references: fileRefs,
+                includes: fileIncludes,
             };
         }
 
@@ -240,6 +395,8 @@ export class Indexer {
     private extractSymbols(uri: string, tree: Parser.Tree): void {
         let currentGlobal = '';
         let pendingComments: string[] = [];
+        const charmapStack: string[] = [];
+        const fileCharmapState: CharmapStateChange[] = [];
 
         for (const lineNode of tree.rootNode.children) {
             // Handle both 'line' and 'final_line' (EOF without newline)
@@ -277,15 +434,23 @@ export class Indexer {
                 } else if (child.type === 'statement') {
                     for (const stmt of child.children) {
                         this.processStatement(uri, stmt, currentGlobal, docComment);
+                        // Track charmap state from directives in statements
+                        this.trackCharmapState(stmt, lineNode.startPosition.row, uri, fileCharmapState, charmapStack);
                     }
                 } else if (child.type === 'directive') {
                     this.extractDirectiveSymbols(uri, child, currentGlobal, docComment);
+                    this.trackCharmapState(child, lineNode.startPosition.row, uri, fileCharmapState, charmapStack);
                 } else if (child.type === 'instruction') {
                     this.extractReferences(uri, child, currentGlobal);
                 } else if (child.type === 'macro_invocation') {
-                    this.extractReferences(uri, child, currentGlobal);
+                    this.extractMacroInvocation(uri, child, currentGlobal);
                 }
             }
+        }
+
+        // Store charmap state for this file
+        if (fileCharmapState.length > 0) {
+            this.charmapState.set(uri, fileCharmapState);
         }
     }
 
@@ -295,8 +460,101 @@ export class Indexer {
         } else if (node.type === 'instruction') {
             this.extractReferences(uri, node, currentGlobal);
         } else if (node.type === 'macro_invocation') {
-            this.extractReferences(uri, node, currentGlobal);
+            this.extractMacroInvocation(uri, node, currentGlobal);
         }
+    }
+
+    private extractMacroInvocation(uri: string, node: Parser.SyntaxNode, currentGlobal: string): void {
+        // The first identifier is the macro name — add as reference
+        const macroName = node.namedChildren.find(c => c.type === 'identifier');
+        if (macroName) {
+            this.addRef(macroName.text, {
+                name: macroName.text,
+                file: uri,
+                line: macroName.startPosition.row,
+                col: macroName.startPosition.column,
+                endCol: macroName.endPosition.column,
+            });
+        }
+        // Also extract references from operand expressions
+        this.extractReferences(uri, node, currentGlobal);
+    }
+
+    private trackCharmapState(
+        node: Parser.SyntaxNode,
+        line: number,
+        uri: string,
+        fileCharmapState: CharmapStateChange[],
+        charmapStack: string[],
+    ): void {
+        // Walk into directive nodes
+        const directive = node.type === 'directive'
+            ? node.namedChildren[0]
+            : node.namedChildren.find(c => c.type === 'directive')?.namedChildren[0];
+        if (!directive) return;
+
+        if (directive.type === 'newcharmap_directive') {
+            const ids = directive.namedChildren.filter(c => c.type === 'identifier');
+            const name = ids[0]?.text;
+            if (!name) return;
+            this.currentCharmapDef = name;
+            // Create charmap entries map, optionally copying from base
+            const baseCharmap = ids[1]?.text;
+            const baseEntries = baseCharmap ? this.charmapEntries.get(baseCharmap) : undefined;
+            this.charmapEntries.set(name, new Map(baseEntries || []));
+        } else if (directive.type === 'charmap_directive') {
+            // AST: charmap_directive → expression(string) + expression_list(byte values)
+            const strExpr = directive.namedChildren.find(c => c.type === 'expression');
+            const strChild = strExpr?.namedChildren.find(c => c.type === 'string');
+            if (!strChild) return;
+            const str = strChild.text.slice(1, -1); // strip quotes
+
+            const exprList = directive.children.find(c => c.type === 'expression_list');
+            if (!exprList) return;
+            const bytes: number[] = [];
+            for (const child of exprList.namedChildren) {
+                if (child.type === 'expression') {
+                    const val = this.parseNumber(child.text.trim());
+                    if (val !== null) bytes.push(val);
+                }
+            }
+
+            if (bytes.length > 0 && this.currentCharmapDef) {
+                this.charmapEntries.get(this.currentCharmapDef)?.set(str, {
+                    source: str,
+                    bytes,
+                    file: uri,
+                    line: directive.startPosition.row,
+                });
+            }
+        } else if (directive.type === 'setcharmap_directive') {
+            const nameNode = directive.namedChildren.find(c => c.type === 'identifier');
+            if (nameNode) {
+                fileCharmapState.push({ line, charmap: nameNode.text });
+                // SETCHARMAP also changes which charmap receives new CHARMAP entries
+                this.currentCharmapDef = nameNode.text;
+            }
+        } else if (directive.type === 'pushc_directive') {
+            // Push current charmap state
+            const current = fileCharmapState.length > 0
+                ? fileCharmapState[fileCharmapState.length - 1].charmap
+                : '';
+            charmapStack.push(current);
+        } else if (directive.type === 'popc_directive') {
+            const restored = charmapStack.pop() || '';
+            if (restored) {
+                fileCharmapState.push({ line, charmap: restored });
+            }
+        }
+    }
+
+    private parseNumber(text: string): number | null {
+        const t = text.trim();
+        if (/^\d+$/.test(t)) return parseInt(t, 10);
+        if (/^\$[0-9a-fA-F]+$/.test(t)) return parseInt(t.slice(1), 16);
+        if (/^0x[0-9a-fA-F]+$/i.test(t)) return parseInt(t, 16);
+        if (/^%[01]+$/.test(t)) return parseInt(t.slice(1), 2);
+        return null;
     }
 
     private extractLabel(uri: string, node: Parser.SyntaxNode, currentGlobal: string, docComment?: string): void {
@@ -406,7 +664,71 @@ export class Indexer {
                    directive.type === 'assert_directive') {
             this.extractChildReferences(uri, directive, currentGlobal);
         } else if (directive.type === 'include_directive') {
-            // No symbol extraction needed for includes
+            // Record include relationship
+            const stringNode = directive.namedChildren.find(c => c.type === 'string');
+            if (stringNode) {
+                let raw = stringNode.text;
+                if (raw.startsWith('#')) raw = raw.substring(1);
+                if (raw.startsWith('"""')) raw = raw.slice(3, -3);
+                else raw = raw.slice(1, -1);
+
+                const filePath = uriToPath(uri);
+                const resolved = path.resolve(path.dirname(filePath), raw);
+                const targetUri = pathToUri(resolved);
+
+                let refs = this.includers.get(targetUri);
+                if (!refs) {
+                    refs = [];
+                    this.includers.set(targetUri, refs);
+                }
+                refs.push({
+                    from: uri,
+                    line: stringNode.startPosition.row,
+                    col: stringNode.startPosition.column,
+                    endCol: stringNode.endPosition.column,
+                });
+            }
+        } else if (directive.type === 'setcharmap_directive') {
+            // SETCHARMAP references a charmap name
+            const nameNode = directive.namedChildren.find(c => c.type === 'identifier');
+            if (nameNode) {
+                this.addRef(nameNode.text, {
+                    name: nameNode.text,
+                    file: uri,
+                    line: nameNode.startPosition.row,
+                    col: nameNode.startPosition.column,
+                    endCol: nameNode.endPosition.column,
+                });
+            }
+        } else if (directive.type === 'newcharmap_directive') {
+            // NEWCHARMAP defines a charmap name
+            const nameNode = directive.namedChildren.find(c => c.type === 'identifier');
+            if (nameNode) {
+                this.definitions.set(nameNode.text, {
+                    name: nameNode.text,
+                    type: 'constant',
+                    file: uri,
+                    line: nameNode.startPosition.row,
+                    col: nameNode.startPosition.column,
+                    endCol: nameNode.endPosition.column,
+                    isLocal: false,
+                    isExported: false,
+                    docComment,
+                });
+            }
+        } else if (directive.type === 'export_directive' || directive.type === 'purge_directive') {
+            // EXPORT/PURGE reference symbol names
+            for (const child of directive.namedChildren) {
+                if (child.type === 'identifier') {
+                    this.addRef(child.text, {
+                        name: child.text,
+                        file: uri,
+                        line: child.startPosition.row,
+                        col: child.startPosition.column,
+                        endCol: child.endPosition.column,
+                    });
+                }
+            }
         } else {
             // For other directives, scan for symbol references
             this.extractChildReferences(uri, directive, currentGlobal);
