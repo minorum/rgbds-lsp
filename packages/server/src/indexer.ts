@@ -187,6 +187,8 @@ export class Indexer {
         }
         // Re-extract symbols for this file only
         this.extractSymbols(uri, tree);
+        // Rebuild charmap state for all files (charmap state can depend on other files)
+        this.extractAllCharmaps();
     }
 
     public async indexProjectAsync(rootDir: string): Promise<{ indexed: number; failed: number }> {
@@ -399,8 +401,6 @@ export class Indexer {
     private extractSymbols(uri: string, tree: Parser.Tree): void {
         let currentGlobal = '';
         let pendingComments: string[] = [];
-        const charmapStack: string[] = [];
-        const fileCharmapState: CharmapStateChange[] = [];
 
         for (const lineNode of tree.rootNode.children) {
             // Handle both 'line' and 'final_line' (EOF without newline)
@@ -438,23 +438,15 @@ export class Indexer {
                 } else if (child.type === 'statement') {
                     for (const stmt of child.children) {
                         this.processStatement(uri, stmt, currentGlobal, docComment);
-                        // Track charmap state from directives in statements
-                        this.trackCharmapState(stmt, lineNode.startPosition.row, uri, fileCharmapState, charmapStack);
                     }
                 } else if (child.type === 'directive') {
                     this.extractDirectiveSymbols(uri, child, currentGlobal, docComment);
-                    this.trackCharmapState(child, lineNode.startPosition.row, uri, fileCharmapState, charmapStack);
                 } else if (child.type === 'instruction') {
                     this.extractReferences(uri, child, currentGlobal);
                 } else if (child.type === 'macro_invocation') {
                     this.extractMacroInvocation(uri, child, currentGlobal);
                 }
             }
-        }
-
-        // Store charmap state for this file
-        if (fileCharmapState.length > 0) {
-            this.charmapState.set(uri, fileCharmapState);
         }
     }
 
