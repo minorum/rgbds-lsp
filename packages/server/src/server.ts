@@ -23,6 +23,13 @@ import {
     DiagnosticSeverity,
     DocumentLink,
     DocumentLinkParams,
+    FoldingRange,
+    FoldingRangeParams,
+    SemanticTokensParams,
+    SemanticTokens,
+    CodeAction,
+    CodeActionParams,
+    FileChangeType,
 } from 'vscode-languageserver/node';
 
 import { TextDocument } from 'vscode-languageserver-textdocument';
@@ -32,6 +39,11 @@ import { uriToPath, pathToUri, getNodeAtPosition, parseNumberLiteral } from './u
 import { getCompletions } from './completions';
 import { SM83_INSTRUCTIONS, InstructionForm } from './instructions';
 import { DIRECTIVE_DOCS } from './directives';
+import { computeSemanticTokens, SEMANTIC_TOKENS_LEGEND } from './semantic-tokens';
+import { getFoldingRanges } from './folding';
+import { getCodeActions } from './code-actions';
+import { matchInstructionForm } from './instruction-matcher';
+import { getAssembledBytesData, AssembledBytesSettings, DEFAULT_ASSEMBLED_BYTES_SETTINGS, validateCommentBytes, formatBytesFlat } from './inlay-hints';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -39,6 +51,8 @@ const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 let pendingWorkspaceFolders: string[] = [];
+let assembledBytesSettings: AssembledBytesSettings = { ...DEFAULT_ASSEMBLED_BYTES_SETTINGS };
+let validateCommentBytesEnabled = false;
 
 connection.onInitialize((params: InitializeParams) => {
     // Collect workspace folders for background indexing after handshake
@@ -47,6 +61,22 @@ connection.onInitialize((params: InitializeParams) => {
             pendingWorkspaceFolders.push(uriToPath(folder.uri));
         }
     }
+
+    // Capture assembled bytes settings from initialization options
+    const initOptions = params.initializationOptions;
+    connection.console.info(`[Server] Init options: ${JSON.stringify(initOptions || {})}`);
+    if (initOptions?.assembledBytes) {
+        assembledBytesSettings = {
+            enabled: initOptions.assembledBytes.enabled ?? false,
+            maxBytesPerLine: initOptions.assembledBytes.maxBytesPerLine ?? 8,
+        };
+    }
+    if (initOptions?.validateCommentBytes != null) {
+        validateCommentBytesEnabled = initOptions.validateCommentBytes;
+    }
+
+    connection.console.info(`[Server] Assembled bytes: enabled=${assembledBytesSettings.enabled}`);
+    connection.console.info(`[Server] validateCommentBytes: ${validateCommentBytesEnabled}`);
 
     const result: InitializeResult = {
         capabilities: {
@@ -59,6 +89,12 @@ connection.onInitialize((params: InitializeParams) => {
             renameProvider: { prepareProvider: true },
             workspaceSymbolProvider: true,
             documentLinkProvider: {},
+            foldingRangeProvider: true,
+            semanticTokensProvider: {
+                legend: SEMANTIC_TOKENS_LEGEND,
+                full: true,
+            },
+            codeActionProvider: true,
         },
     };
 
@@ -72,9 +108,9 @@ connection.onInitialize((params: InitializeParams) => {
 });
 
 connection.onInitialized(() => {
-    connection.console.log('RGBDS Language Server initialized');
+    connection.console.info('[Server] RGBDS Language Server initialized');
 
-    rgbdsIndexer.onLog = (msg) => connection.console.log(msg);
+    rgbdsIndexer.onLog = (msg) => connection.console.info(`[Indexer] ${msg}`);
 
     // Index workspace folders in the background after the handshake completes
     const folders = [...pendingWorkspaceFolders];
@@ -82,7 +118,7 @@ connection.onInitialized(() => {
     (async () => {
         for (const folderPath of folders) {
             const result = await rgbdsIndexer.indexProjectAsync(folderPath);
-            connection.console.log(`Indexed workspace: ${folderPath} (${rgbdsIndexer.definitions.size} definitions, ${result.indexed} files)`);
+            connection.console.info(`[Indexer] Indexed workspace: ${folderPath} (${rgbdsIndexer.definitions.size} definitions, ${result.indexed} files)`);
         }
         // Refresh diagnostics for all open documents now that indexing is complete
         for (const doc of documents.all()) {
@@ -91,7 +127,16 @@ connection.onInitialized(() => {
                 diagnostics: computeDiagnostics(doc),
             });
         }
-    })();
+
+    })().catch(err => connection.console.error(`[Server] Indexing failed: ${err}`));
+});
+
+connection.onShutdown(() => {
+    connection.console.info('[Server] Shutting down');
+});
+
+connection.onExit(() => {
+    process.exit(0);
 });
 
 // Reindex on file change
@@ -103,11 +148,117 @@ documents.onDidChangeContent(change => {
     connection.sendDiagnostics({ uri: change.document.uri, diagnostics });
 });
 
+documents.onDidClose(event => {
+    connection.sendDiagnostics({ uri: event.document.uri, diagnostics: [] });
+});
+
+
+// Reindex on external file changes (edits outside VS Code, git operations, etc.)
+connection.onDidChangeWatchedFiles((params) => {
+    for (const change of params.changes) {
+        const uri = change.uri;
+        // Skip files already open in the editor — those are handled by onDidChangeContent
+        if (documents.get(uri)) continue;
+
+        try {
+            const filePath = uriToPath(uri);
+            if (change.type === FileChangeType.Deleted) {
+                // Deleted — remove from index
+                // Remove definitions
+                for (const [name, def] of rgbdsIndexer.definitions) {
+                    if (def.file === uri) rgbdsIndexer.definitions.delete(name);
+                }
+                // Remove references
+                for (const [name, refs] of rgbdsIndexer.references) {
+                    const filtered = refs.filter(r => r.file !== uri);
+                    if (filtered.length === 0) rgbdsIndexer.references.delete(name);
+                    else rgbdsIndexer.references.set(name, filtered);
+                }
+                // Remove include records
+                for (const [target, refs] of rgbdsIndexer.includers) {
+                    const filtered = refs.filter(r => r.from !== uri);
+                    if (filtered.length === 0) rgbdsIndexer.includers.delete(target);
+                    else rgbdsIndexer.includers.set(target, filtered);
+                }
+            } else {
+                // Created or changed — reindex
+                const content = fs.readFileSync(filePath, 'utf-8');
+                rgbdsIndexer.indexFile(uri, content);
+            }
+        } catch {
+            // File may not exist or be unreadable
+        }
+    }
+
+    // Refresh diagnostics for open documents
+    for (const doc of documents.all()) {
+        connection.sendDiagnostics({
+            uri: doc.uri,
+            diagnostics: computeDiagnostics(doc),
+        });
+    }
+
+    // Check if ROM/sym files changed — reload and refresh inlay hints
+});
+
+// Handle settings changes at runtime
+connection.onDidChangeConfiguration((params) => {
+    const settings = params.settings?.rgbds;
+    if (settings) {
+        assembledBytesSettings = {
+            enabled: settings.assembledBytes?.enabled ?? false,
+            maxBytesPerLine: settings.assembledBytes?.maxBytesPerLine ?? 8,
+        };
+        connection.console.info(`[Config] Assembled bytes enabled=${assembledBytesSettings.enabled}`);
+    }
+});
+
 // ─── Go to Definition ─────────────────────────────────────────
 
 connection.onDefinition((params: TextDocumentPositionParams): Location | null => {
     const doc = documents.get(params.textDocument.uri);
     if (!doc) return null;
+
+    const defTree = rgbdsIndexer.getOrParseTree(doc.uri);
+    if (defTree) {
+        const node = getNodeAtPosition(defTree, params.position.line, params.position.character);
+
+        // Check if cursor is inside a string — go to MTE charmap definition
+        let stringWalk: Parser.SyntaxNode | null = node;
+        while (stringWalk) {
+            if (stringWalk.type === 'string') {
+                const mteLocation = getMteDefinitionAtCursor(doc.uri, stringWalk, params.position);
+                if (mteLocation) return mteLocation;
+                break;
+            }
+            stringWalk = stringWalk.parent;
+        }
+
+        // Check if cursor is on an INCLUDE path string
+        let walk: Parser.SyntaxNode | null = node;
+        while (walk) {
+            if (walk.type === 'include_directive' || walk.type === 'incbin_directive') {
+                const stringNode = walk.namedChildren.find(c => c.type === 'string');
+                if (stringNode) {
+                    let raw = stringNode.text;
+                    if (raw.startsWith('#')) raw = raw.substring(1);
+                    if (raw.startsWith('"""')) raw = raw.slice(3, -3);
+                    else raw = raw.slice(1, -1);
+                    const docPath = uriToPath(doc.uri);
+                    const resolved = path.resolve(path.dirname(docPath), raw);
+                    if (fs.existsSync(resolved)) {
+                        return {
+                            uri: pathToUri(resolved),
+                            range: Range.create(0, 0, 0, 0),
+                        };
+                    }
+                }
+                break;
+            }
+            if (walk.type === 'line' || walk.type === 'final_line') break;
+            walk = walk.parent;
+        }
+    }
 
     const symbol = getSymbolAtPosition(doc, params.position);
     if (!symbol) return null;
@@ -126,6 +277,35 @@ connection.onDefinition((params: TextDocumentPositionParams): Location | null =>
 connection.onReferences((params): Location[] => {
     const doc = documents.get(params.textDocument.uri);
     if (!doc) return [];
+
+    // Check if cursor is on an INCLUDE path — return all files that include the target
+    const refTree = rgbdsIndexer.getTree(doc.uri);
+    if (refTree) {
+        const node = getNodeAtPosition(refTree, params.position.line, params.position.character);
+        let walk: Parser.SyntaxNode | null = node;
+        while (walk) {
+            if (walk.type === 'include_directive' || walk.type === 'incbin_directive') {
+                const stringNode = walk.namedChildren.find(c => c.type === 'string');
+                if (stringNode) {
+                    let raw = stringNode.text;
+                    if (raw.startsWith('#')) raw = raw.substring(1);
+                    if (raw.startsWith('"""')) raw = raw.slice(3, -3);
+                    else raw = raw.slice(1, -1);
+                    const docPath = uriToPath(doc.uri);
+                    const resolved = path.resolve(path.dirname(docPath), raw);
+                    const targetUri = pathToUri(resolved);
+                    const includeRefs = rgbdsIndexer.includers.get(targetUri) || [];
+                    return includeRefs.map(r => ({
+                        uri: r.from,
+                        range: Range.create(r.line, r.col, r.line, r.endCol),
+                    }));
+                }
+                break;
+            }
+            if (walk.type === 'line' || walk.type === 'final_line') break;
+            walk = walk.parent;
+        }
+    }
 
     const symbol = getSymbolAtPosition(doc, params.position);
     if (!symbol) return [];
@@ -158,13 +338,15 @@ connection.onHover((params: HoverParams): Hover | null => {
     const doc = documents.get(params.textDocument.uri);
     if (!doc) return null;
 
-    // Skip hover inside strings
-    const hoverTree = rgbdsIndexer.getTree(doc.uri);
+    // String hover — show charmap encoding info
+    const hoverTree = rgbdsIndexer.getOrParseTree(doc.uri);
     if (hoverTree) {
         const hoverNode = getNodeAtPosition(hoverTree, params.position.line, params.position.character);
         let walk: Parser.SyntaxNode | null = hoverNode;
         while (walk) {
-            if (walk.type === 'string') return null;
+            if (walk.type === 'string') {
+                return getStringHover(doc.uri, walk, params.position.line, params.position.character);
+            }
             walk = walk.parent;
         }
     }
@@ -334,7 +516,7 @@ connection.onWorkspaceSymbol((params): SymbolInformation[] => {
 // ─── Document Links ──────────────────────────────────────────
 
 connection.onDocumentLinks((params: DocumentLinkParams): DocumentLink[] => {
-    const tree = rgbdsIndexer.getTree(params.textDocument.uri);
+    const tree = rgbdsIndexer.getOrParseTree(params.textDocument.uri);
     if (!tree) return [];
 
     const links: DocumentLink[] = [];
@@ -377,7 +559,103 @@ connection.onDocumentLinks((params: DocumentLinkParams): DocumentLink[] => {
         }
     }
 
+    // Add MTE charmap links for strings
+    addMteLinks(params.textDocument.uri, tree, links);
+
     return links;
+});
+
+function addMteLinks(uri: string, tree: Parser.Tree, links: DocumentLink[]): void {
+    for (const lineNode of tree.rootNode.children) {
+        if (lineNode.type !== 'line' && lineNode.type !== 'final_line') continue;
+
+        findStringsInLine(lineNode, (stringNode) => {
+            const str = stringNode.text.slice(1, -1);
+            if (!str) return;
+
+            const strLine = stringNode.startPosition.row;
+            const activeCharmap = rgbdsIndexer.getActiveCharmap(uri, strLine);
+            if (!activeCharmap) return;
+
+            const segments = rgbdsIndexer.encodeString(activeCharmap, str);
+            if (!segments) return;
+
+            const strStartCol = stringNode.startPosition.column + 1;
+            let pos = 0;
+            for (const seg of segments) {
+                if (seg.isMte) {
+                    const entry = rgbdsIndexer.getCharmapEntryDef(activeCharmap, seg.source);
+                    if (entry) {
+                        const hex = entry.bytes.map(b => '$' + b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+                        links.push({
+                            range: Range.create(
+                                strLine, strStartCol + pos,
+                                strLine, strStartCol + pos + seg.source.length,
+                            ),
+                            target: `${entry.file}#L${entry.line + 1}`,
+                            tooltip: `MTE: "${seg.source}" → ${hex}`,
+                        });
+                    }
+                }
+                pos += seg.source.length;
+            }
+        });
+    }
+}
+
+function findStringsInLine(node: Parser.SyntaxNode, callback: (strNode: Parser.SyntaxNode) => void): void {
+    if (node.type === 'string') {
+        callback(node);
+        return;
+    }
+    for (const child of node.children) {
+        findStringsInLine(child, callback);
+    }
+}
+
+// ─── Folding Ranges ──────────────────────────────────────────
+
+connection.onFoldingRanges((params: FoldingRangeParams): FoldingRange[] => {
+    const tree = rgbdsIndexer.getTree(params.textDocument.uri);
+    if (!tree) return [];
+    return getFoldingRanges(tree);
+});
+
+// ─── Semantic Tokens ─────────────────────────────────────────
+
+connection.onRequest('textDocument/semanticTokens/full', (params: SemanticTokensParams): SemanticTokens => {
+    const tree = rgbdsIndexer.getTree(params.textDocument.uri);
+    if (!tree) return { data: [] };
+    const builder = computeSemanticTokens(tree, params.textDocument.uri, rgbdsIndexer);
+    return builder.build();
+});
+
+// ─── Code Actions ────────────────────────────────────────────
+
+connection.onCodeAction((params: CodeActionParams): CodeAction[] => {
+    const tree = rgbdsIndexer.getTree(params.textDocument.uri);
+    return getCodeActions(params, tree);
+});
+
+// ─── Assembled Bytes ──────────────────────────────────────────
+
+connection.onRequest('rgbds/assembledBytes', (params: { uri: string; startLine: number; endLine: number }) => {
+    const tree = rgbdsIndexer.getTree(params.uri);
+    if (!tree) return { lines: [] };
+    const entries = getAssembledBytesData(
+        tree,
+        params.uri,
+        params.startLine,
+        params.endLine,
+        assembledBytesSettings,
+        rgbdsIndexer.definitions,
+        (u) => rgbdsIndexer.getOrParseTree(u),
+        (str, line) => {
+            const charmap = rgbdsIndexer.getActiveCharmap(params.uri, line);
+            return charmap ? rgbdsIndexer.encodeStringBytes(charmap, str) : null;
+        },
+    );
+    return { lines: entries };
 });
 
 // ─── Completion ───────────────────────────────────────────────
@@ -474,10 +752,124 @@ function computeDiagnostics(doc: TextDocument): Diagnostic[] {
         // (We only report if we find multiple defs with same name)
     }
 
+    // Validate hex byte annotations in comments against computed bytes
+    if (validateCommentBytesEnabled) {
+        const tree = rgbdsIndexer.getTree(uri);
+        connection.console.info(`[Diagnostics] validateCommentBytes enabled, tree=${!!tree} for ${uri.split('/').pop()}`);
+        if (tree) {
+            const mismatches = validateCommentBytes(
+                tree,
+                uri,
+                rgbdsIndexer.definitions,
+                (u) => rgbdsIndexer.getOrParseTree(u),
+                (str, line) => {
+                    const charmap = rgbdsIndexer.getActiveCharmap(uri, line);
+                    return charmap ? rgbdsIndexer.encodeStringBytes(charmap, str) : null;
+                },
+                (msg) => connection.console.info(msg),
+            );
+            for (const m of mismatches) {
+                diagnostics.push({
+                    range: Range.create(m.line, m.commentCol, m.line, m.commentEndCol),
+                    severity: DiagnosticSeverity.Warning,
+                    message: `Byte mismatch: comment has ${formatBytesFlat(m.commentBytes)}, expected ${formatBytesFlat(m.computedBytes)}`,
+                    source: 'rgbds',
+                });
+            }
+        }
+    }
+
     return diagnostics;
 }
 
 // ─── Utilities ────────────────────────────────────────────────
+
+function getMteDefinitionAtCursor(
+    uri: string,
+    stringNode: Parser.SyntaxNode,
+    position: { line: number; character: number },
+): Location | null {
+    const str = stringNode.text.slice(1, -1);
+    if (!str) return null;
+
+    const activeCharmap = rgbdsIndexer.getActiveCharmap(uri, position.line);
+    if (!activeCharmap) return null;
+
+    const segments = rgbdsIndexer.encodeString(activeCharmap, str);
+    if (!segments) return null;
+
+    // Find which segment the cursor is on
+    const strStartCol = stringNode.startPosition.column + 1;
+    const cursorOffset = position.character - strStartCol;
+    let pos = 0;
+    for (const seg of segments) {
+        if (cursorOffset >= pos && cursorOffset < pos + seg.source.length && seg.isMte) {
+            // Look up the CHARMAP definition
+            const entry = rgbdsIndexer.getCharmapEntryDef(activeCharmap, seg.source);
+            if (entry) {
+                return {
+                    uri: entry.file,
+                    range: Range.create(entry.line, 0, entry.line, 0),
+                };
+            }
+        }
+        pos += seg.source.length;
+    }
+    return null;
+}
+
+function getStringHover(uri: string, stringNode: Parser.SyntaxNode, line: number, cursorCol: number): Hover | null {
+    const rawText = stringNode.text;
+    const str = rawText.slice(1, -1); // strip quotes
+    if (!str) return null;
+
+    const activeCharmap = rgbdsIndexer.getActiveCharmap(uri, line);
+    const segments = activeCharmap
+        ? rgbdsIndexer.encodeString(activeCharmap, str)
+        : null;
+
+    let md = '';
+    if (activeCharmap) {
+        md += `**Charmap**: \`${activeCharmap}\`\n\n`;
+    }
+
+    if (segments && segments.length > 0) {
+        const totalBytes = segments.reduce((sum, s) => sum + s.bytes.length, 0);
+        md += `**Size**: ${totalBytes} byte${totalBytes !== 1 ? 's' : ''}\n\n`;
+
+        // Find which segment the cursor is on
+        const strStartCol = stringNode.startPosition.column + 1; // after opening quote
+        const cursorOffset = cursorCol - strStartCol;
+        let cursorSegCharPos = 0;
+        let cursorSegment: typeof segments[0] | null = null;
+        let pos = 0;
+        for (const seg of segments) {
+            if (cursorOffset >= pos && cursorOffset < pos + seg.source.length) {
+                cursorSegment = seg;
+                cursorSegCharPos = pos;
+                break;
+            }
+            pos += seg.source.length;
+        }
+
+        // If cursor is on an MTE segment, show just that match
+        if (cursorSegment && cursorSegment.isMte) {
+            const hex = cursorSegment.bytes.map(b => '$' + b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+            md += `**MTE**: \`"${cursorSegment.source}"\` → \`${hex}\``;
+            const segStart = strStartCol + cursorSegCharPos;
+            return {
+                contents: { kind: 'markdown', value: md },
+                range: Range.create(line, segStart, line, segStart + cursorSegment.source.length),
+            };
+        }
+
+        // Otherwise show full encoding breakdown
+        const allHex = segments.flatMap(s => s.bytes).map(b => '$' + b.toString(16).toUpperCase().padStart(2, '0')).join(' ');
+        md += `**Bytes**: \`${allHex}\``;
+    }
+
+    return { contents: { kind: 'markdown', value: md } };
+}
 
 function getSymbolAtPosition(doc: TextDocument, position: { line: number; character: number }): string | null {
     const text = doc.getText();
@@ -525,89 +917,6 @@ function getWordRangeAtPosition(doc: TextDocument, position: { line: number; cha
     return Range.create(position.line, start, position.line, end);
 }
 
-// ─── Instruction form matching ────────────────────────────────
-
-const REGISTERS_8 = new Set(['a', 'b', 'c', 'd', 'e', 'h', 'l']);
-const REGISTERS_16 = new Set(['bc', 'de', 'hl']);
-
-function matchInstructionForm(instrNode: Parser.SyntaxNode, forms: InstructionForm[]): InstructionForm | null {
-    // Build a pattern string from the AST operands like "r8, [hl]" or "a, n8"
-    const operandList = instrNode.children.find(c => c.type === 'operand_list');
-    if (!operandList) {
-        // No operands — match the bare mnemonic form
-        return forms.find(f => !f.label.includes(' ') || f.label.split(' ').length === 1) || null;
-    }
-
-    const operands = operandList.children.filter(c => c.type === 'operand');
-    const patterns: string[] = [];
-
-    for (const op of operands) {
-        patterns.push(classifyOperand(op));
-    }
-
-    const mnemonic = instrNode.children.find(c => c.type === 'mnemonic')?.text.toLowerCase() || '';
-    const pattern = `${mnemonic} ${patterns.join(', ')}`;
-
-    // Try exact match first, then fuzzy
-    return forms.find(f => f.label === pattern)
-        || forms.find(f => fuzzyFormMatch(f.label, mnemonic, patterns))
-        || null;
-}
-
-function classifyOperand(op: Parser.SyntaxNode): string {
-    const child = op.children[0] || op;
-
-    if (child.type === 'register') {
-        const reg = child.text.toLowerCase();
-        if (REGISTERS_8.has(reg)) return reg === 'a' ? 'a' : 'r8';
-        if (REGISTERS_16.has(reg)) return reg === 'hl' ? 'hl' : 'r16';
-        return reg;
-    }
-    if (child.type === 'sp_register') return 'sp';
-    if (child.type === 'sp_offset') return 'sp+e8';
-    if (child.type === 'condition') return 'cc';
-    if (child.type === 'memory_operand') {
-        // [hl], [hl+], [hl-], [bc], [de], [c], [n16]
-        const inner = child.children.find(c => c.type !== '[' && c.type !== ']' && c.text !== '[' && c.text !== ']');
-        if (!inner) return '[n16]';
-        const txt = child.text.toLowerCase();
-        if (txt === '[hl]') return '[hl]';
-        if (txt === '[hl+]' || txt === '[hli]') return '[hl+]';
-        if (txt === '[hl-]' || txt === '[hld]') return '[hl-]';
-        if (txt === '[c]') return '[c]';
-        if (inner.type === 'register') {
-            const reg = inner.text.toLowerCase();
-            if (REGISTERS_16.has(reg)) return `[${reg === 'hl' ? 'hl' : 'r16'}]`;
-            return `[${reg}]`;
-        }
-        return '[n16]';
-    }
-    // Expression — could be n8, n16, e8, u3
-    return 'n8';
-}
-
-function fuzzyFormMatch(label: string, mnemonic: string, patterns: string[]): boolean {
-    if (!label.startsWith(mnemonic + ' ')) return false;
-    const formOperands = label.substring(mnemonic.length + 1).split(', ');
-    if (formOperands.length !== patterns.length) return false;
-
-    for (let i = 0; i < patterns.length; i++) {
-        const p = patterns[i];
-        const f = formOperands[i];
-        // Direct match
-        if (p === f) continue;
-        // 'a' matches 'r8', specific register matches generic
-        if (f === 'r8' && REGISTERS_8.has(p)) continue;
-        if (f === 'r16' && REGISTERS_16.has(p)) continue;
-        if (f === 'cc' && ['z', 'nz', 'c', 'nc'].includes(p)) continue;
-        if (f === '[r16]' && ['[bc]', '[de]', '[hl]'].includes(p)) continue;
-        // n8/n16/e8/u3 all come from expressions
-        if (['n8', 'n16', 'e8', 'u3'].includes(f) && p === 'n8') continue;
-        if (f === 'sp+e8' && p === 'sp+e8') continue;
-        return false;
-    }
-    return true;
-}
 
 // Map directive node types (from grammar) to our doc keys
 const DIRECTIVE_NODE_MAP: { [nodeType: string]: string } = {
