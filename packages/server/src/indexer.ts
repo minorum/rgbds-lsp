@@ -1,6 +1,6 @@
 import Parser from 'tree-sitter';
 import { SymbolDef, SymbolRef, IncludeRef, CharmapStateChange, CharmapSegment, CharmapEntry } from './types';
-import { pathToUri, uriToPath, collectRgbdsFiles } from './utils';
+import { pathToUri, uriToPath, collectRgbdsFiles, stripQuotes } from './utils';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -503,7 +503,7 @@ export class Indexer {
             const strExpr = directive.namedChildren.find(c => c.type === 'expression');
             const strChild = strExpr?.namedChildren.find(c => c.type === 'string');
             if (!strChild) return;
-            const str = strChild.text.slice(1, -1); // strip quotes
+            const str = stripQuotes(strChild.text);
 
             const exprList = directive.children.find(c => c.type === 'expression_list');
             if (!exprList) return;
@@ -647,8 +647,7 @@ export class Indexer {
             // Extract section name from the string
             const stringNode = directive.children.find(c => c.type === 'string');
             if (stringNode) {
-                const rawText = stringNode.text;
-                const name = rawText.slice(1, -1); // strip quotes
+                const name = stripQuotes(stringNode.text);
                 this.definitions.set(name, {
                     name,
                     type: 'section',
@@ -672,11 +671,7 @@ export class Indexer {
             // Record include relationship
             const stringNode = directive.namedChildren.find(c => c.type === 'string');
             if (stringNode) {
-                let raw = stringNode.text;
-                if (raw.startsWith('#')) raw = raw.substring(1);
-                if (raw.startsWith('"""')) raw = raw.slice(3, -3);
-                else raw = raw.slice(1, -1);
-
+                const raw = stripQuotes(stringNode.text);
                 const filePath = uriToPath(uri);
                 const resolved = path.resolve(path.dirname(filePath), raw);
                 const targetUri = pathToUri(resolved);

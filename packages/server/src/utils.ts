@@ -78,6 +78,14 @@ export function parseNumberLiteral(text: string): NumberValue | null {
     };
 }
 
+/** Strip surrounding quotes from an RGBDS string literal: "...", """...""", or #"..." */
+export function stripQuotes(text: string): string {
+    if (text.startsWith('#"')) text = text.slice(1); // remove # prefix
+    if (text.startsWith('"""') && text.endsWith('"""')) return text.slice(3, -3);
+    if (text.length >= 2) return text.slice(1, -1);
+    return text;
+}
+
 export function collectRgbdsFiles(rootDir: string): string[] {
     const result: string[] = [];
     const stack = [rootDir];

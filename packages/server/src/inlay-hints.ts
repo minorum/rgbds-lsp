@@ -2,6 +2,7 @@ import Parser from 'tree-sitter';
 import { SM83_INSTRUCTIONS } from './instructions';
 import { matchInstructionForm } from './instruction-matcher';
 import { SymbolDef } from './types';
+import { stripQuotes } from './utils';
 
 export interface AssembledBytesSettings {
     enabled: boolean;
@@ -631,9 +632,9 @@ function emitDataBytes(
     for (const part of parts) {
         const trimmed = part.trim();
         // String literal
-        if ((trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+        if ((trimmed.startsWith('"') || trimmed.startsWith('#"') || trimmed.startsWith('"""')) ||
             (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
-            const str = trimmed.slice(1, -1);
+            const str = stripQuotes(trimmed);
             // Try charmap encoding first
             const encoded = encodeString && line !== undefined ? encodeString(str, line) : null;
             if (encoded) {
@@ -736,7 +737,7 @@ function getDataDirectiveBytes(dataNode: Parser.SyntaxNode, line: number, defini
 
         const strNode = findStringInExpression(child);
         if (strNode) {
-            const str = strNode.text.slice(1, -1); // strip quotes
+            const str = stripQuotes(strNode.text);
             // Try charmap encoding first, fall back to ASCII
             const encoded = encodeString ? encodeString(str, line) : null;
             if (encoded) {
@@ -800,7 +801,7 @@ function resolveConstant(name: string, definitions: Map<string, SymbolDef>): num
 // ─── String handling ──────────────────────────────────────────
 
 function extractStringChars(quotedStr: string): number[] {
-    const inner = quotedStr.slice(1, -1);
+    const inner = stripQuotes(quotedStr);
     const bytes: number[] = [];
     for (let i = 0; i < inner.length; i++) {
         if (inner[i] === '\\' && i + 1 < inner.length) {

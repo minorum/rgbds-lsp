@@ -35,7 +35,7 @@ import {
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import Parser from 'tree-sitter';
 import { rgbdsIndexer } from './indexer';
-import { uriToPath, pathToUri, getNodeAtPosition, parseNumberLiteral } from './utils';
+import { uriToPath, pathToUri, getNodeAtPosition, parseNumberLiteral, stripQuotes } from './utils';
 import { getCompletions } from './completions';
 import { SM83_INSTRUCTIONS, InstructionForm } from './instructions';
 import { DIRECTIVE_DOCS } from './directives';
@@ -240,10 +240,7 @@ connection.onDefinition((params: TextDocumentPositionParams): Location | null =>
             if (walk.type === 'include_directive' || walk.type === 'incbin_directive') {
                 const stringNode = walk.namedChildren.find(c => c.type === 'string');
                 if (stringNode) {
-                    let raw = stringNode.text;
-                    if (raw.startsWith('#')) raw = raw.substring(1);
-                    if (raw.startsWith('"""')) raw = raw.slice(3, -3);
-                    else raw = raw.slice(1, -1);
+                    const raw = stripQuotes(stringNode.text);
                     const docPath = uriToPath(doc.uri);
                     const resolved = path.resolve(path.dirname(docPath), raw);
                     if (fs.existsSync(resolved)) {
@@ -287,10 +284,7 @@ connection.onReferences((params): Location[] => {
             if (walk.type === 'include_directive' || walk.type === 'incbin_directive') {
                 const stringNode = walk.namedChildren.find(c => c.type === 'string');
                 if (stringNode) {
-                    let raw = stringNode.text;
-                    if (raw.startsWith('#')) raw = raw.substring(1);
-                    if (raw.startsWith('"""')) raw = raw.slice(3, -3);
-                    else raw = raw.slice(1, -1);
+                    const raw = stripQuotes(stringNode.text);
                     const docPath = uriToPath(doc.uri);
                     const resolved = path.resolve(path.dirname(docPath), raw);
                     const targetUri = pathToUri(resolved);
@@ -537,12 +531,7 @@ connection.onDocumentLinks((params: DocumentLinkParams): DocumentLink[] => {
                 const stringNode = directive.children.find(c => c.type === 'string');
                 if (!stringNode) continue;
 
-                // Strip quotes (handle "", """""", #"")
-                let raw = stringNode.text;
-                if (raw.startsWith('#')) raw = raw.substring(1);
-                if (raw.startsWith('"""')) raw = raw.slice(3, -3);
-                else raw = raw.slice(1, -1);
-
+                const raw = stripQuotes(stringNode.text);
                 const resolved = path.resolve(docDir, raw);
                 if (fs.existsSync(resolved)) {
                     links.push({
@@ -570,7 +559,7 @@ function addMteLinks(uri: string, tree: Parser.Tree, links: DocumentLink[]): voi
         if (lineNode.type !== 'line' && lineNode.type !== 'final_line') continue;
 
         findStringsInLine(lineNode, (stringNode) => {
-            const str = stringNode.text.slice(1, -1);
+            const str = stripQuotes(stringNode.text);
             if (!str) return;
 
             const strLine = stringNode.startPosition.row;
@@ -784,7 +773,7 @@ function getMteDefinitionAtCursor(
     stringNode: Parser.SyntaxNode,
     position: { line: number; character: number },
 ): Location | null {
-    const str = stringNode.text.slice(1, -1);
+    const str = stripQuotes(stringNode.text);
     if (!str) return null;
 
     const activeCharmap = rgbdsIndexer.getActiveCharmap(uri, position.line);
@@ -814,8 +803,7 @@ function getMteDefinitionAtCursor(
 }
 
 function getStringHover(uri: string, stringNode: Parser.SyntaxNode, line: number, cursorCol: number): Hover | null {
-    const rawText = stringNode.text;
-    const str = rawText.slice(1, -1); // strip quotes
+    const str = stripQuotes(stringNode.text);
     if (!str) return null;
 
     const activeCharmap = rgbdsIndexer.getActiveCharmap(uri, line);
